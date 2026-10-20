@@ -16,6 +16,8 @@ public sealed class LogService : ILogService
 
     public int Count => Volatile.Read(ref _snapshot)?.Count ?? 0;
 
+    public TimeSpan Duration => Volatile.Read(ref _snapshot)?.Duration ?? TimeSpan.Zero;
+
     public async Task LoadAsync(string path, CancellationToken cancellationToken = default, IProgress<int>? progress = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -25,6 +27,9 @@ public sealed class LogService : ILogService
         Volatile.Write(ref _snapshot, snapshot);
         progress?.Report(100);
     }
+
+    public IReadOnlyList<string> GetTypes() =>
+        Volatile.Read(ref _snapshot)!.ByType.Keys.OrderBy(type => type, StringComparer.Ordinal).ToArray();
 
     public IReadOnlyList<LogEntry> GetLogs(TimeSpan from, TimeSpan to, params string[] types)
     {
@@ -107,9 +112,10 @@ public sealed class LogService : ILogService
                 group => group.OrderBy(entry => entry.Timestamp).ThenBy(entry => entry.LineNumber).ToArray(),
                 StringComparer.OrdinalIgnoreCase);
         var startTime = entries.Count == 0 ? default : entries.Min(entry => entry.Timestamp);
+        var duration = entries.Count == 0 ? TimeSpan.Zero : byType.Values.Max(group => group[^1].Timestamp) - startTime;
         progress?.Report(100);
-        return new Snapshot(startTime, entries.Count, byType);
+        return new Snapshot(startTime, duration, entries.Count, byType);
     }
 
-    private sealed record Snapshot(DateTime StartTime, int Count, Dictionary<string, LogEntry[]> ByType);
+    private sealed record Snapshot(DateTime StartTime, TimeSpan Duration, int Count, Dictionary<string, LogEntry[]> ByType);
 }

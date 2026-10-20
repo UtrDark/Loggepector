@@ -1,6 +1,141 @@
-﻿namespace Loggepector.ViewModels;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using CommunityToolkit.Mvvm.ComponentModel;
+using Loggepector.Models;
+using Loggepector.Services;
+
+namespace Loggepector.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
-    public string Greeting { get; } = "Welcome to Avalonia!";
+    private readonly ILogService _logService;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanOpenFile))]
+    [NotifyPropertyChangedFor(nameof(CanSelectTime))]
+    private bool _isLoading;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSelectTime))]
+    private bool _hasLogs;
+
+    [ObservableProperty]
+    private int _loadProgress;
+
+    [ObservableProperty]
+    private string _fileName = "Файл не выбран";
+
+    [ObservableProperty]
+    private string? _errorMessage;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TimeLabel))]
+    private double _fromSecond;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TimeLabel))]
+    private double _toSecond;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TimeLabel))]
+    [NotifyPropertyChangedFor(nameof(SliderMaximum))]
+    [NotifyPropertyChangedFor(nameof(CanSelectTime))]
+    private double _maximumSecond;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CountLabel))]
+    private int _totalCount;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CountLabel))]
+    [NotifyPropertyChangedFor(nameof(IsEmpty))]
+    private IReadOnlyList<LogEntry> _logs = Array.Empty<LogEntry>();
+
+    [ObservableProperty]
+    private IReadOnlyList<LogTypeViewModel> _logTypes = Array.Empty<LogTypeViewModel>();
+
+    [ObservableProperty]
+    private bool _isSearchVisible;
+
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    public bool IsEmpty => Logs.Count == 0;
+    public bool CanOpenFile => !IsLoading;
+    public bool CanSelectTime => HasLogs && !IsLoading && MaximumSecond > 0;
+    public double SliderMaximum => Math.Max(1, MaximumSecond);
+    public string TimeLabel => $"От {TimeSpan.FromSeconds(FromSecond):c} до {TimeSpan.FromSeconds(ToSecond):c} · Всего {TimeSpan.FromSeconds(MaximumSecond):c}";
+    public string CountLabel => $"Показано: {Logs.Count:N0} · Всего: {TotalCount:N0}";
+
+    public MainWindowViewModel(ILogService logService)
+    {
+        _logService = logService;
+    }
+
+    public async Task LoadAsync(string path)
+    {
+        IsLoading = true;
+        ErrorMessage = null;
+        LoadProgress = 0;
+        var progress = new Progress<int>(value =>
+        {
+            if (IsLoading)
+                LoadProgress = value;
+        });
+
+        try
+        {
+            await _logService.LoadAsync(path, progress: progress);
+            FileName = Path.GetFileName(path);
+            TotalCount = _logService.Count;
+            HasLogs = TotalCount > 0;
+            LogTypes = _logService.GetTypes().Select(type => new LogTypeViewModel(type, UpdateLogs)).ToArray();
+            FromSecond = 0;
+            ToSecond = 0;
+            MaximumSecond = Math.Ceiling(_logService.Duration.TotalSeconds);
+            ToSecond = Math.Min(30, MaximumSecond);
+            UpdateLogs();
+            LoadProgress = 100;
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = exception.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    partial void OnFromSecondChanged(double value)
+    {
+        if (CanSelectTime)
+            UpdateLogs();
+    }
+
+    partial void OnToSecondChanged(double value)
+    {
+        if (CanSelectTime)
+            UpdateLogs();
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        if (HasLogs && !IsLoading)
+            UpdateLogs();
+    }
+
+    private void UpdateLogs()
+    {
+        var from = TimeSpan.FromSeconds(FromSecond);
+        var to = TimeSpan.FromSeconds(ToSecond);
+        var types = LogTypes.Where(type => type.IsSelected).Select(type => type.Type).ToArray();
+        var entries = types.Length == 0 ? Array.Empty<LogEntry>() : _logService.GetLogs(from, to, types);
+        Logs = string.IsNullOrEmpty(SearchText)
+            ? entries
+            : entries.Where(entry => entry.Message.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToArray();
+    }
 }
