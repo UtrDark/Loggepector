@@ -12,5 +12,7 @@ public interface ILogService
     TimeSpan Duration { get; }
     Task LoadAsync(string path, CancellationToken cancellationToken = default, IProgress<int>? progress = null);
     IReadOnlyList<string> GetTypes();
-    IReadOnlyList<LogEntry> GetLogs(TimeSpan from, TimeSpan to, params string[] types);
+    IReadOnlyList<string> GetCKeys();
+    IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, params string[] types);
+    IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, IReadOnlyList<string> types, IReadOnlyList<string> ckeys, string searchText = "");
 }

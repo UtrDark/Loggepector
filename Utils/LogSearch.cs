@@ -5,7 +5,7 @@ namespace Loggepector.Utils;
 
 public static class LogSearch
 {
-    public static int FindBoundary(LogEntry[] entries, DateTime startTime, TimeSpan offset, bool upper)
+    public static int FindBoundary(ILogEntry[] entries, DateTime startTime, TimeSpan offset, bool upper)
     {
         var low = 0;
         var high = entries.Length;

@@ -4,8 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
-using Loggepector.Models;
 using Loggepector.Services;
+using Loggepector.Utils;
 
 namespace Loggepector.ViewModels;
 
@@ -52,7 +52,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CountLabel))]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
-    private IReadOnlyList<LogEntry> _logs = Array.Empty<LogEntry>();
+    private IReadOnlyList<LogEntryViewModel> _logs = Array.Empty<LogEntryViewModel>();
 
     [ObservableProperty]
     private IReadOnlyList<LogTypeViewModel> _logTypes = Array.Empty<LogTypeViewModel>();
@@ -62,6 +62,27 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _searchText = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilteredPlayers))]
+    [NotifyPropertyChangedFor(nameof(PlayerLabel))]
+    private IReadOnlyList<PlayerViewModel> _players = Array.Empty<PlayerViewModel>();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilteredPlayers))]
+    private string _playerSearchText = string.Empty;
+
+    public IEnumerable<PlayerViewModel> FilteredPlayers =>
+        Players.Where(player => player.CKey.Contains(CKey.Normalize(PlayerSearchText), StringComparison.Ordinal));
+
+    public string PlayerLabel
+    {
+        get
+        {
+            var selected = Players.Where(player => player.IsSelected).Select(player => player.CKey).ToArray();
+            return selected.Length == 0 ? "Игроки: все ▾" : "Игроки: " + string.Join(", ", selected) + " ▾";
+        }
+    }
 
     public bool IsEmpty => Logs.Count == 0;
     public bool CanOpenFile => !IsLoading;
@@ -93,10 +114,12 @@ public partial class MainWindowViewModel : ViewModelBase
             TotalCount = _logService.Count;
             HasLogs = TotalCount > 0;
             LogTypes = _logService.GetTypes().Select(type => new LogTypeViewModel(type, UpdateLogs)).ToArray();
+            Players = _logService.GetCKeys().Select(key => new PlayerViewModel(key, OnPlayerSelectionChanged)).ToArray();
+            PlayerSearchText = string.Empty;
             FromSecond = 0;
             ToSecond = 0;
             MaximumSecond = Math.Ceiling(_logService.Duration.TotalSeconds);
-            ToSecond = Math.Min(30, MaximumSecond);
+            ToSecond = MaximumSecond;
             UpdateLogs();
             LoadProgress = 100;
         }
@@ -128,14 +151,20 @@ public partial class MainWindowViewModel : ViewModelBase
             UpdateLogs();
     }
 
+    private void OnPlayerSelectionChanged()
+    {
+        OnPropertyChanged(nameof(PlayerLabel));
+        if (HasLogs && !IsLoading)
+            UpdateLogs();
+    }
+
     private void UpdateLogs()
     {
         var from = TimeSpan.FromSeconds(FromSecond);
         var to = TimeSpan.FromSeconds(ToSecond);
         var types = LogTypes.Where(type => type.IsSelected).Select(type => type.Type).ToArray();
-        var entries = types.Length == 0 ? Array.Empty<LogEntry>() : _logService.GetLogs(from, to, types);
-        Logs = string.IsNullOrEmpty(SearchText)
-            ? entries
-            : entries.Where(entry => entry.Message.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var players = Players.Where(player => player.IsSelected).Select(player => player.CKey).ToArray();
+        Logs = _logService.GetLogs(from, to, types, players, SearchText)
+            .Select(entry => new LogEntryViewModel(entry)).ToArray();
     }
 }

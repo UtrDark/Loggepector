@@ -1,7 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Loggepector.ViewModels"
-        xmlns:models="using:Loggepector.Models"
         xmlns:rs="using:RangeSlider.Avalonia.Controls"
         x:Class="Loggepector.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -49,6 +48,27 @@
                 </Button>
                 <Button Content="Поиск · Ctrl+F" Click="OpenSearch" />
             </StackPanel>
+            <Button IsEnabled="{Binding CanOpenFile}" HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left">
+                <TextBlock Text="{Binding PlayerLabel}" TextTrimming="CharacterEllipsis" />
+                <Button.Flyout>
+                    <Flyout>
+                        <StackPanel Width="320" Spacing="8">
+                            <TextBox Text="{Binding PlayerSearchText, Mode=TwoWay}" Watermark="Найти ckey игрока…" />
+                            <TextBlock Text="Выберите игроков. Пустой выбор — все." Opacity="0.65" />
+                            <ScrollViewer MaxHeight="280">
+                                <ItemsControl ItemsSource="{Binding FilteredPlayers}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:PlayerViewModel">
+                                            <CheckBox Content="{Binding CKey}" IsChecked="{Binding IsSelected, Mode=TwoWay}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
             <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsSearchVisible}">
                 <TextBox x:Name="SearchBox" Text="{Binding SearchText, Mode=TwoWay}"
                          Watermark="Поиск по тексту в выбранном диапазоне" />
@@ -57,11 +77,17 @@
         </StackPanel>
 
         <Grid Grid.Row="6">
-            <ListBox ItemsSource="{Binding Logs}"
+            <ListBox x:Name="LogsList" ItemsSource="{Binding Logs}" AutoScrollToSelectedItem="False"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.Styles>
+                    <Style Selector="ScrollViewer">
+                        <Setter Property="BringIntoViewOnFocusChange" Value="False" />
+                    </Style>
                     <Style Selector="ListBoxItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="MinHeight" Value="44" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="VerticalContentAlignment" Value="Stretch" />
                     </Style>
                 </ListBox.Styles>
                 <ListBox.ItemsPanel>
@@ -70,12 +96,31 @@
                     </ItemsPanelTemplate>
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
-                    <DataTemplate x:DataType="models:LogEntry">
-                        <Grid ColumnDefinitions="110,120,*" Margin="4,6">
-                            <TextBlock Text="{Binding Timestamp, StringFormat='{}{0:HH:mm:ss.fff}'}"
-                                       Opacity="0.65" />
-                            <TextBlock Grid.Column="1" Text="{Binding Type}" FontWeight="SemiBold" />
-                            <TextBlock Grid.Column="2" Text="{Binding Message}" TextWrapping="Wrap" />
+                    <DataTemplate x:DataType="vm:LogEntryViewModel">
+                        <Grid RowDefinitions="44,Auto" Background="{Binding RowBackground}">
+                            <Grid ColumnDefinitions="110,120,Auto,*,Auto" Margin="8,0">
+                                <TextBlock Text="{Binding Entry.Timestamp, StringFormat='{}{0:HH:mm:ss.fff}'}"
+                                           VerticalAlignment="Center" Opacity="0.65" />
+                                <TextBlock Grid.Column="1" Text="{Binding Entry.Type}" FontWeight="SemiBold"
+                                           Foreground="{Binding TypeColor}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Text="{Binding ChannelLabel}" Foreground="{Binding ChannelColor}"
+                                           IsVisible="{Binding HasChannel}" FontWeight="SemiBold"
+                                           VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="3" Text="{Binding Message}" TextWrapping="NoWrap"
+                                           VerticalAlignment="Center" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                <Button Grid.Column="4" Content="{Binding ExpandLabel}"
+                                              IsVisible="{Binding IsMultiline}"
+                                              Click="ToggleLogDetails"
+                                              Margin="8,0,0,0" Padding="8,2" VerticalAlignment="Center"
+                                              ToolTip.Tip="Развернуть или свернуть запись" />
+                            </Grid>
+                            <Border Grid.Row="1" IsVisible="{Binding IsExpanded}" Padding="8"
+                                    BorderThickness="0,1,0,0" BorderBrush="Gray">
+                                <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled">
+                                    <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                                </ScrollViewer>
+                            </Border>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>

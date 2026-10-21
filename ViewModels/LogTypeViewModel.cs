@@ -8,7 +8,7 @@ public partial class LogTypeViewModel : ObservableObject
     private readonly Action _selectionChanged;
 
     [ObservableProperty]
-    private bool _isSelected = true;
+    private bool _isSelected;
 
     public string Type { get; }
     public string Label => Type.Length == 0 ? "Без типа" : Type;

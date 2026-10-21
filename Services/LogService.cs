@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Loggepector.Models;
+using Loggepector.Filters;
 using Loggepector.Utils;
 
 namespace Loggepector.Services;
@@ -29,44 +31,30 @@ public sealed class LogService : ILogService
     }
 
     public IReadOnlyList<string> GetTypes() =>
-        Volatile.Read(ref _snapshot)!.ByType.Keys.OrderBy(type => type, StringComparer.Ordinal).ToArray();
+        Volatile.Read(ref _snapshot)!.Entries.Select(entry => entry.Type).Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(type => type, StringComparer.Ordinal).ToArray();
 
-    public IReadOnlyList<LogEntry> GetLogs(TimeSpan from, TimeSpan to, params string[] types)
+    public IReadOnlyList<string> GetCKeys() =>
+        Volatile.Read(ref _snapshot)!.Players.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray();
+
+    public IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, params string[] types) =>
+        GetLogs(from, to, types, Array.Empty<string>());
+
+    public IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, IReadOnlyList<string> types,
+        IReadOnlyList<string> ckeys, string searchText = "")
     {
         var snapshot = Volatile.Read(ref _snapshot)!;
-        var arrays = new List<LogEntry[]>();
-        if (types.Length == 0)
-        {
-            arrays.AddRange(snapshot.ByType.Values);
-        }
-        else
-        {
-            foreach (var type in types.Distinct(StringComparer.OrdinalIgnoreCase))
-            {
-                if (snapshot.ByType.TryGetValue(type, out var entries))
-                    arrays.Add(entries);
-            }
-        }
-
-        var queue = new PriorityQueue<(LogEntry[] Entries, int Index, int End), (DateTime Time, int Line)>();
-        foreach (var entries in arrays)
-        {
-            var start = LogSearch.FindBoundary(entries, snapshot.StartTime, from, false);
-            var end = LogSearch.FindBoundary(entries, snapshot.StartTime, to, true);
-            if (start < end)
-                queue.Enqueue((entries, start, end), (entries[start].Timestamp, entries[start].LineNumber));
-        }
-
-        var result = new List<LogEntry>();
-        while (queue.TryDequeue(out var cursor, out _))
-        {
-            result.Add(cursor.Entries[cursor.Index]);
-            var next = cursor.Index + 1;
-            if (next < cursor.End)
-                queue.Enqueue((cursor.Entries, next, cursor.End), (cursor.Entries[next].Timestamp, cursor.Entries[next].LineNumber));
-        }
-
-        return result.AsReadOnly();
+        ILogFilter[] filters =
+        [
+            new TimeLogFilter(snapshot.StartTime, from, to),
+            new TypeLogFilter(types),
+            new PlayerLogFilter(ckeys, snapshot.Players),
+            new TextLogFilter(searchText)
+        ];
+        IEnumerable<ILogEntry> entries = snapshot.Entries;
+        foreach (var filter in filters)
+            entries = filter.Apply(entries);
+        return entries.ToArray();
     }
 
     private static async Task<Snapshot> ParseAsync(string path, CancellationToken cancellationToken, IProgress<int>? progress)
@@ -74,7 +62,7 @@ public sealed class LogService : ILogService
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
             4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
         using var reader = new StreamReader(stream, new UTF8Encoding(false, true), true);
-        var entries = new List<LogEntry>();
+        var entries = new List<ILogEntry>();
         var text = new StringBuilder();
         var entryStartLine = 0;
         var sourceLineNumber = 0;
@@ -86,7 +74,12 @@ public sealed class LogService : ILogService
             if (line is null || line.StartsWith('['))
             {
                 if (entryStartLine != 0 && LogEntryParser.Parse(text.ToString(), entryStartLine) is { } entry)
-                    entries.Add(entry);
+                {
+                    if (entries.Count > 0 && MergeRadio.Merge(entries[^1], entry) is { } merged)
+                        entries[^1] = merged;
+                    else
+                        entries.Add(entry);
+                }
 
                 if (line is null)
                     break;
@@ -107,15 +100,28 @@ public sealed class LogService : ILogService
             progress?.Report((int)Math.Floor(stream.Position * 90.0 / fileLength));
         }
 
-        var byType = entries.GroupBy(entry => entry.Type)
-            .ToDictionary(group => group.Key,
-                group => group.OrderBy(entry => entry.Timestamp).ThenBy(entry => entry.LineNumber).ToArray(),
-                StringComparer.OrdinalIgnoreCase);
-        var startTime = entries.Count == 0 ? default : entries.Min(entry => entry.Timestamp);
-        var duration = entries.Count == 0 ? TimeSpan.Zero : byType.Values.Max(group => group[^1].Timestamp) - startTime;
+        var sorted = entries.OrderBy(entry => entry.Timestamp).ThenBy(entry => entry.LineNumber)
+            .ToArray();
+        var startTime = sorted.Length == 0 ? default : sorted[0].Timestamp;
+        var duration = sorted.Length == 0 ? TimeSpan.Zero : sorted[^1].Timestamp - startTime;
+        var players = entries.Where(entry => entry.Type == "ACCESS")
+            .Select(entry => Regex.Match(entry.GetRawMessage(), @"^\[[^\]\r\n]+\] ACCESS: ?Mob Login: (?<key>.+?)/\("))
+            .Where(match => match.Success)
+            .Select(match => match.Groups["key"].Value)
+            .Where(key => key != "*no key*")
+            .GroupBy(CKey.Normalize)
+            .Where(group => group.Key.Length > 0)
+            .ToDictionary(group => group.Key, group => new Regex(
+                @"(?<![\p{L}\p{N}_-])(?:" +
+                string.Join("|", group.Append(group.Key).Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(key => key.Length).Select(Regex.Escape)) +
+                @")(?![\p{L}\p{N}_-])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
+        var sensitiveKeys = LogMessageSanitizer.CreateKeyPattern(entries);
+        sorted = sorted.Select(entry => ((LogEntry)entry) with { SensitiveKeys = sensitiveKeys }).ToArray();
         progress?.Report(100);
-        return new Snapshot(startTime, duration, entries.Count, byType);
+        return new Snapshot(startTime, duration, entries.Count, sorted, players);
     }
 
-    private sealed record Snapshot(DateTime StartTime, TimeSpan Duration, int Count, Dictionary<string, LogEntry[]> ByType);
+    private sealed record Snapshot(DateTime StartTime, TimeSpan Duration, int Count, ILogEntry[] Entries,
+        Dictionary<string, Regex> Players);
 }

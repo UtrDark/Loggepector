@@ -1,0 +1,31 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using Avalonia.Media;
+using Loggepector.Models;
+
+namespace Loggepector.ViewModels;
+
+public partial class LogEntryViewModel(ILogEntry entry) : ViewModelBase
+{
+    public ILogEntry Entry { get; } = entry;
+
+    public string Message { get; } = entry.GetLogMessage();
+
+    public bool IsMultiline => Message.Contains('\n') || Message.Contains('\r');
+
+    public bool HasChannel => Entry.Channel is not null;
+
+    public string ChannelLabel => Entry.Channel is { } channel ? $"[{LogDisplayConfig.GetChannel(channel).Text}]" : string.Empty;
+
+    public IBrush ChannelColor => Entry.Channel is { } channel
+        ? LogDisplayConfig.GetChannel(channel).Color : Brushes.Transparent;
+
+    public IBrush TypeColor => LogDisplayConfig.GetType(Entry.Type).Foreground;
+
+    public IBrush RowBackground => LogDisplayConfig.GetType(Entry.Type).Background;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ExpandLabel))]
+    private bool _isExpanded;
+
+    public string ExpandLabel => IsExpanded ? "▴" : "▾";
+}

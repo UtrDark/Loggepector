@@ -1,4 +1,7 @@
 using System;
+using System.Linq;
+using Avalonia;
+using Avalonia.VisualTree;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
@@ -16,17 +19,51 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, HandleSearchKeys, RoutingStrategies.Tunnel);
     }
 
+    private void ToggleLogDetails(object? sender, RoutedEventArgs e)
+    {
+        var button = (Button)sender!;
+        var entry = (LogEntryViewModel)button.DataContext!;
+        var container = button.GetVisualAncestors().OfType<ListBoxItem>().First();
+        var scroller = container.GetVisualAncestors().OfType<ScrollViewer>().First();
+        var position = container.TranslatePoint(default, scroller)!.Value;
+        var index = LogsList.IndexFromContainer(container);
+        var restoreFocus = button.IsFocused;
+
+        if (restoreFocus)
+            LogsList.Focus();
+
+        entry.IsExpanded = !entry.IsExpanded;
+        LogsList.UpdateLayout();
+        LogsList.ScrollIntoView(index);
+        LogsList.UpdateLayout();
+
+        var currentContainer = LogsList.ContainerFromIndex(index);
+        var currentPosition = currentContainer.TranslatePoint(default, scroller)!.Value;
+        scroller.Offset = new Vector(scroller.Offset.X, scroller.Offset.Y + currentPosition.Y - position.Y);
+        LogsList.UpdateLayout();
+
+        if (restoreFocus)
+        {
+            var focusedContainer = LogsList.ContainerFromIndex(index);
+            focusedContainer.GetVisualDescendants().OfType<Button>()
+                .Single(control => ReferenceEquals(control.DataContext, entry)).Focus();
+        }
+
+        e.Handled = true;
+    }
+
     private void HandleSearchKeys(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Control)
+        switch (e.Key)
         {
-            OpenSearch(sender, e);
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Escape && ((MainWindowViewModel)DataContext!).IsSearchVisible)
-        {
-            CloseSearch(sender, e);
-            e.Handled = true;
+            case Key.F when e.KeyModifiers == KeyModifiers.Control:
+                OpenSearch(sender, e);
+                e.Handled = true;
+                break;
+            case Key.Escape when ((MainWindowViewModel)DataContext!).IsSearchVisible:
+                CloseSearch(sender, e);
+                e.Handled = true;
+                break;
         }
     }
 
@@ -43,7 +80,6 @@ public partial class MainWindow : Window
     private void CloseSearch(object? sender, RoutedEventArgs e)
     {
         var viewModel = (MainWindowViewModel)DataContext!;
-        viewModel.SearchText = string.Empty;
         viewModel.IsSearchVisible = false;
     }
 
