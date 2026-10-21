@@ -48,6 +48,11 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
 
     public void ShowPoint(MapLogPoint point)
     {
+        if (SelectedPoint is { } selected && selected.X == point.X && selected.Y == point.Y && selected.Z == point.Z)
+        {
+            ClosePoint();
+            return;
+        }
         PointEntries = point.Entries.Select(entry => new LogEntryViewModel(entry, Timeline.RoundStartTime)).ToArray();
         SelectedPoint = point;
     }

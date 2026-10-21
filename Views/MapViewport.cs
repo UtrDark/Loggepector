@@ -39,6 +39,7 @@ public sealed class MapViewport : Panel
     private bool _dragged;
     public event Action<MapLogPoint>? MarkerClicked;
 
+    private const double MaximumZoom = 4;
     private const long CacheBudget = 192L * 1024 * 1024;
     private readonly Dictionary<TileKey, CachedTile> _cache = new();
     private readonly Dictionary<int, MapLayerControl> _layers = new();
@@ -84,7 +85,6 @@ public sealed class MapViewport : Panel
     {
         ClipToBounds = true;
         Cursor = new Cursor(StandardCursorType.Hand);
-        DoubleTapped += (_, _) => Fit();
         SizeChanged += (_, _) =>
         {
             if (!_fitted)
@@ -149,7 +149,8 @@ public sealed class MapViewport : Panel
         if (!map.Layers.Contains(location.Z - map.WorldZOffset) || location.X < 1 || location.Y < 1 ||
             location.X > map.Width / map.TileSize || location.Y > map.Height / map.TileSize)
             return;
-        const double zoom = 0.8;
+        const double zoom = MaximumZoom;
+        _fitted = true;
         var x = (location.X - 0.5) * map.TileSize;
         var y = map.Height - (location.Y - 0.5) * map.TileSize;
         _offset = new Vector(Bounds.Width / 2 - x * zoom, Bounds.Height / 2 - y * zoom);
@@ -161,7 +162,7 @@ public sealed class MapViewport : Panel
     {
         if (Document is not { } map || Bounds.Width <= 0 || Bounds.Height <= 0)
             return;
-        var zoom = Math.Min(4, Math.Min(Bounds.Width / map.Width, Bounds.Height / map.Height));
+        var zoom = Math.Min(MaximumZoom, Math.Min(Bounds.Width / map.Width, Bounds.Height / map.Height));
         _offset = new Vector((Bounds.Width - map.Width * zoom) / 2, (Bounds.Height - map.Height * zoom) / 2);
         _fitted = true;
         SetCurrentValue(ZoomProperty, zoom);
@@ -172,8 +173,8 @@ public sealed class MapViewport : Panel
     {
         if (Document is not { } map || Bounds.Width <= 0 || Bounds.Height <= 0)
             return;
-        var minimum = Math.Min(4, Math.Min(Bounds.Width / map.Width, Bounds.Height / map.Height));
-        var zoom = Math.Clamp(Zoom * factor, minimum, 4);
+        var minimum = Math.Min(MaximumZoom, Math.Min(Bounds.Width / map.Width, Bounds.Height / map.Height));
+        var zoom = Math.Clamp(Zoom * factor, minimum, MaximumZoom);
         var world = (point - _offset) / Zoom;
         _offset = new Vector(point.X - world.X * zoom, point.Y - world.Y * zoom);
         SetCurrentValue(ZoomProperty, zoom);
@@ -242,7 +243,7 @@ public sealed class MapViewport : Panel
             UpdateLayers();
             return;
         }
-        var minimum = Math.Min(4, Math.Min(Bounds.Width / map.Width, Bounds.Height / map.Height));
+        var minimum = Math.Min(MaximumZoom, Math.Min(Bounds.Width / map.Width, Bounds.Height / map.Height));
         if (Zoom < minimum)
         {
             ZoomAt(new Point(Bounds.Width / 2, Bounds.Height / 2), minimum / Zoom);
