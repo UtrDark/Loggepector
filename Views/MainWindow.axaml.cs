@@ -3,11 +3,15 @@ using System.Linq;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Threading;
+using System.Threading.Tasks;
+using System.IO;
 using Avalonia;
 using Avalonia.VisualTree;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.Platform.Storage;
 using Loggepector.ViewModels;
@@ -19,6 +23,7 @@ public partial class MainWindow : Window
 {
     private readonly CancellationTokenSource _mapPreparationCancellation = new();
     private MapViewWindow? _mapWindow;
+    private bool _isCopyingLogs;
     private readonly List<PlayersInfoWindow> _playerWindows = new();
 
     public MainWindow()
@@ -76,10 +81,14 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
-    private void HandleSearchKeys(object? sender, KeyEventArgs e)
+    private async void HandleSearchKeys(object? sender, KeyEventArgs e)
     {
         switch (e.Key)
         {
+            case Key.C when e.KeyModifiers == KeyModifiers.Control && CanCopyLogs(e):
+                e.Handled = true;
+                await CopySelectedLogsAsync();
+                break;
             case Key.F when e.KeyModifiers == KeyModifiers.Control:
                 OpenSearch(sender, e);
                 e.Handled = true;
@@ -88,6 +97,48 @@ public partial class MainWindow : Window
                 CloseSearch(sender, e);
                 e.Handled = true;
                 break;
+        }
+    }
+
+    private bool CanCopyLogs(KeyEventArgs e)
+    {
+        if (LogsList.SelectedItems is not { Count: > 0 } || e.Source is not Visual source)
+            return false;
+        var ancestors = source.GetVisualAncestors().Prepend(source).ToArray();
+        return ancestors.Contains(LogsList) && !ancestors.OfType<TextBox>().Any() &&
+               !ancestors.OfType<SelectableTextBlock>().Any(text => text.SelectionStart != text.SelectionEnd);
+    }
+
+    private async Task CopySelectedLogsAsync()
+    {
+        if (_isCopyingLogs)
+            return;
+        var viewModel = (MainWindowViewModel)DataContext!;
+        _isCopyingLogs = true;
+        viewModel.ErrorMessage = null;
+        try
+        {
+            var clipboard = Clipboard ?? throw new InvalidOperationException("Буфер обмена недоступен.");
+            var selected = LogsList.SelectedItems!.Cast<LogEntryViewModel>()
+                .OrderBy(log => log.Entry.Timestamp).ThenBy(log => log.Entry.LineNumber).ToArray();
+            using var bitmap = LogImageRenderer.Render(selected, ActualThemeVariant == ThemeVariant.Dark);
+            using var stream = new MemoryStream();
+            bitmap.Save(stream);
+            var item = new DataTransferItem();
+            item.SetBitmap(bitmap);
+            item.Set(DataFormat.CreateBytesPlatformFormat(OperatingSystem.IsWindows() ? "PNG" : "image/png"), stream.ToArray());
+            var data = new DataTransfer();
+            data.Add(item);
+            await clipboard.SetDataAsync(data);
+            await clipboard.FlushAsync();
+        }
+        catch (Exception exception)
+        {
+            viewModel.ErrorMessage = $"Не удалось скопировать PNG: {exception.Message}";
+        }
+        finally
+        {
+            _isCopyingLogs = false;
         }
     }
 
