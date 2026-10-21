@@ -8,10 +8,11 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="Loggepector">
     <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto,Auto">
-        <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,16">
+        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,16">
             <Button Content="Открыть .log" Click="OpenLogFile" IsEnabled="{Binding CanOpenFile}" />
             <TextBlock Grid.Column="1" Text="{Binding FileName}" Margin="16,0,0,0"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+            <Button Grid.Column="2" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}" Margin="12,0,0,0" />
         </Grid>
 
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto" IsVisible="{Binding IsLoading}" Margin="0,0,0,12">
@@ -130,7 +131,7 @@
                                               ToolTip.Tip="Развернуть или свернуть запись" />
                             </Grid>
                             <Border Grid.Row="1" IsVisible="{Binding IsExpanded}" Padding="8"
-                                    BorderThickness="0,1,0,0" BorderBrush="Gray">
+                                    BorderThickness="0,1,0,0" BorderBrush="{DynamicResource AppBorderBrush}">
                                 <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled">
                                     <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
                                 </ScrollViewer>
@@ -146,7 +147,7 @@
 
         <TextBlock Grid.Row="7" Text="{Binding CountLabel}" Margin="0,12,0,0" Opacity="0.65" />
         <StackPanel Grid.Row="8" Spacing="8">
-            <Border IsVisible="{Binding IsMapToolsPromptVisible}" Padding="12" BorderBrush="Gray" BorderThickness="1">
+            <Border IsVisible="{Binding IsMapToolsPromptVisible}" Padding="12" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Скачать инструменты и исходники BandaStation для рендера карт?"
                                TextWrapping="Wrap" FontWeight="SemiBold" />

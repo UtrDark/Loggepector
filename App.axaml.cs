@@ -1,3 +1,5 @@
+using System;
+using Loggepector.Services;
 using Autofac;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -26,9 +28,21 @@ public partial class App : Application
             DisableAvaloniaDataAnnotationValidation();
             var scope = ProjectScope.Build();
             desktop.Exit += (_, _) => scope.Dispose();
+            string? themeError = null;
+            try
+            {
+                scope.Resolve<IThemeService>().Load();
+            }
+            catch (Exception exception)
+            {
+                themeError = $"Не удалось загрузить тему: {exception.Message}";
+            }
+            var viewModel = scope.Resolve<MainWindowViewModel>();
+            if (themeError is not null)
+                viewModel.ErrorMessage = themeError;
             desktop.MainWindow = new MainWindow
             {
-                DataContext = scope.Resolve<MainWindowViewModel>(),
+                DataContext = viewModel,
             };
         }
 

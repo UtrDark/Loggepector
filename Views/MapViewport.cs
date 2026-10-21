@@ -83,7 +83,6 @@ public sealed class MapViewport : Panel
     public MapViewport()
     {
         ClipToBounds = true;
-        Background = Brush.Parse("#E3E7EC");
         Cursor = new Cursor(StandardCursorType.Hand);
         DoubleTapped += (_, _) => Fit();
         SizeChanged += (_, _) =>

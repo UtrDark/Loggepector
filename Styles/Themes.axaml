@@ -1,0 +1,45 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:Loggepector.Views">
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="AppWindowBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#F5F6F8" />
+                    <SolidColorBrush x:Key="AppPanelBrush" Color="#F5FFFFFF" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#202632" />
+                    <SolidColorBrush x:Key="AppMutedTextBrush" Color="#5D687A" />
+                    <SolidColorBrush x:Key="AppBorderBrush" Color="#D5DAE2" />
+                    <SolidColorBrush x:Key="AppCardBrush" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="AppSearchBrush" Color="#FFF1B8" />
+                    <SolidColorBrush x:Key="AppSearchBorderBrush" Color="#B78012" />
+                    <SolidColorBrush x:Key="AppSelectedBrush" Color="#E5EFFC" />
+                    <SolidColorBrush x:Key="AppSelectedBorderBrush" Color="#2463A6" />
+                    <SolidColorBrush x:Key="MapCanvasBrush" Color="#E3E7EC" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="AppWindowBrush" Color="#101318" />
+                    <SolidColorBrush x:Key="AppSurfaceBrush" Color="#14181F" />
+                    <SolidColorBrush x:Key="AppPanelBrush" Color="#F5212630" />
+                    <SolidColorBrush x:Key="AppTextBrush" Color="#E4E9F1" />
+                    <SolidColorBrush x:Key="AppMutedTextBrush" Color="#A5B0C2" />
+                    <SolidColorBrush x:Key="AppBorderBrush" Color="#3A4352" />
+                    <SolidColorBrush x:Key="AppCardBrush" Color="#1D232D" />
+                    <SolidColorBrush x:Key="AppSearchBrush" Color="#4A3B1C" />
+                    <SolidColorBrush x:Key="AppSearchBorderBrush" Color="#D5AD47" />
+                    <SolidColorBrush x:Key="AppSelectedBrush" Color="#243F62" />
+                    <SolidColorBrush x:Key="AppSelectedBorderBrush" Color="#72ADF5" />
+                    <SolidColorBrush x:Key="MapCanvasBrush" Color="#151A22" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Styles.Resources>
+    <Style Selector=":is(Window)">
+        <Setter Property="Background" Value="{DynamicResource AppWindowBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource AppTextBrush}" />
+    </Style>
+    <Style Selector="views|MapViewport">
+        <Setter Property="Background" Value="{DynamicResource MapCanvasBrush}" />
+    </Style>
+</Styles>

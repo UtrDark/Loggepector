@@ -39,6 +39,28 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool HasContextStatus => !string.IsNullOrEmpty(ContextStatus);
 
+    private readonly IThemeService _themeService;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ThemeButtonText))]
+    private bool _isDarkTheme;
+
+    public string ThemeButtonText => IsDarkTheme ? "Светлая тема" : "Тёмная тема";
+
+    [RelayCommand]
+    private void ToggleTheme()
+    {
+        try
+        {
+            _themeService.SetTheme(!IsDarkTheme);
+            IsDarkTheme = _themeService.IsDark;
+        }
+        catch (Exception exception)
+        {
+            ErrorMessage = $"Не удалось сохранить тему: {exception.Message}";
+        }
+    }
+
     private readonly ILogService _logService;
     private readonly IMapPreparationService _mapPreparation;
     private readonly IMapViewService _mapViewService;
@@ -145,8 +167,10 @@ public partial class MainWindowViewModel : ViewModelBase
     public string TimeLabel => $"От {TimeSpan.FromSeconds(FromSecond):c} до {TimeSpan.FromSeconds(ToSecond):c} · Всего {TimeSpan.FromSeconds(MaximumSecond):c}";
     public string CountLabel => $"Показано: {Logs.Count:N0} · Всего: {TotalCount:N0}";
 
-    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService)
+    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService, IThemeService themeService)
     {
+        _themeService = themeService;
+        IsDarkTheme = themeService.IsDark;
         _logService = logService;
         _mapPreparation = mapPreparation;
         _mapViewService = mapViewService;

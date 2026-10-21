@@ -3,8 +3,7 @@
              x:Class="Loggepector.App"
              xmlns:local="using:Loggepector"
              xmlns:rangeThemes="using:RangeSlider.Avalonia.Themes.Fluent"
-             RequestedThemeVariant="Default">
-             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+             RequestedThemeVariant="Light">
 
     <Application.DataTemplates>
         <local:ViewLocator/>
@@ -13,5 +12,6 @@
     <Application.Styles>
         <FluentTheme />
         <rangeThemes:RangeSliderTheme />
+        <StyleInclude Source="/Styles/Themes.axaml" />
     </Application.Styles>
 </Application>

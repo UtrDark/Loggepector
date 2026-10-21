@@ -6,6 +6,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Loggepector.Models;
 
 namespace Loggepector.Views;
@@ -20,6 +21,28 @@ internal sealed class MapLogLayer : Control
     private static readonly Dictionary<string, Color> PlayerColors = new(StringComparer.Ordinal);
     private MapLogDraw[] _draws = Array.Empty<MapLogDraw>();
     private double _zoom = 1;
+
+    public MapLogLayer()
+    {
+        ActualThemeVariantChanged += (_, _) => RefreshAppearance();
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == TextElement.ForegroundProperty)
+            RefreshAppearance();
+    }
+
+    private void RefreshAppearance()
+    {
+        if (_draws is not { Length: > 0 })
+            return;
+        var previous = _draws;
+        var positions = previous.ToDictionary(draw => draw.Log, draw => draw.Position);
+        _draws = Array.Empty<MapLogDraw>();
+        Update(previous.Select(draw => draw.Log).ToArray(), point => positions[point], _zoom);
+    }
 
     internal void Update(MapLogPoint[] points, Func<MapLogPoint, Point> project, double zoom)
     {
@@ -37,8 +60,9 @@ internal sealed class MapLogLayer : Control
             }
             var brush = new SolidColorBrush(color);
             var typeColor = ((SolidColorBrush)LogDisplayConfig.GetType(point.Entries[^1].Type).Foreground).Color;
-            var fill = new SolidColorBrush(Color.FromRgb((byte)((typeColor.R + 255) / 2),
-                (byte)((typeColor.G + 255) / 2), (byte)((typeColor.B + 255) / 2)));
+            var surface = ActualThemeVariant == ThemeVariant.Dark ? Color.Parse("#14181F") : Colors.White;
+            var fill = new SolidColorBrush(Color.FromRgb((byte)((typeColor.R + surface.R) / 2),
+                (byte)((typeColor.G + surface.G) / 2), (byte)((typeColor.B + surface.B) / 2)));
             var text = new FormattedText(point.Name, CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight, new Typeface("Inter"), 7, TextElement.GetForeground(this))
             {

@@ -9,7 +9,7 @@
         Width="1200" Height="850" MinWidth="700" MinHeight="450"
         WindowStartupLocation="CenterScreen">
     <Grid RowDefinitions="Auto,*">
-        <Border Padding="16,10" Background="#F5FFFFFF">
+        <Border Padding="16,10" Background="{DynamicResource AppPanelBrush}">
             <StackPanel Spacing="4">
                 <rs:RangeSlider Minimum="0" Maximum="{Binding Timeline.SliderMaximum}"
                                 LowerSelectedValue="{Binding Timeline.FromSecond, Mode=TwoWay}"
@@ -23,21 +23,21 @@
                                FocusLocation="{Binding FocusLocation}" LogIndex="{Binding LogIndex}"
                                SelectedLayer="{Binding SelectedLayer}" Zoom="{Binding Zoom, Mode=TwoWay}" />
             <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"
-                    Background="#EFFFFFFF" CornerRadius="6" Padding="10">
+                    Background="{DynamicResource AppPanelBrush}" CornerRadius="6" Padding="10">
                 <StackPanel Spacing="6">
-                    <TextBlock Text="{Binding MapName}" Foreground="#202632" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding MapName}" Foreground="{DynamicResource AppTextBrush}" FontWeight="SemiBold" />
                     <Button Content="↑" Command="{Binding LayerUpCommand}" Width="34" Height="32"
                             HorizontalContentAlignment="Center" />
-                    <TextBlock Text="{Binding SelectedLayer, StringFormat='Z: {0}'}" Foreground="#5D687A" />
+                    <TextBlock Text="{Binding SelectedLayer, StringFormat='Z: {0}'}" Foreground="{DynamicResource AppMutedTextBrush}" />
                     <Button Content="↓" Command="{Binding LayerDownCommand}" Width="34" Height="32"
                             HorizontalContentAlignment="Center" />
                 </StackPanel>
             </Border>
             <Border IsVisible="{Binding HasSelectedPoint}" HorizontalAlignment="Right" Margin="12"
-                    Width="400" Background="#F5FFFFFF" Padding="12" CornerRadius="6">
+                    Width="400" Background="{DynamicResource AppPanelBrush}" Padding="12" CornerRadius="6">
                 <Grid RowDefinitions="Auto,*">
                     <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-                        <TextBlock Text="{Binding SelectedPoint.Name}" TextWrapping="Wrap" Foreground="#202632" />
+                        <TextBlock Text="{Binding SelectedPoint.Name}" TextWrapping="Wrap" Foreground="{DynamicResource AppTextBrush}" />
                         <Button Grid.Column="1" Content="×" Command="{Binding ClosePointCommand}" Margin="8,0,0,0" />
                     </Grid>
                     <ListBox Grid.Row="1" ItemsSource="{Binding PointEntries}"
@@ -57,9 +57,9 @@
                 </Grid>
             </Border>
             <Border IsVisible="{Binding HasStatus}" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                    Margin="16" Padding="12" CornerRadius="6" Background="#F5FFFFFF" MaxWidth="650">
+                    Margin="16" Padding="12" CornerRadius="6" Background="{DynamicResource AppPanelBrush}" MaxWidth="650">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="{Binding Status}" Foreground="#202632" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AppTextBrush}" TextWrapping="Wrap" />
                     <Button Content="Повторить загрузку" Click="ReloadMap" HorizontalAlignment="Center" />
                 </StackPanel>
             </Border>
