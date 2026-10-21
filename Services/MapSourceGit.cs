@@ -17,7 +17,7 @@ internal static class MapSourceGit
     {
         foreach (var directory in (Environment.GetEnvironmentVariable("PATH") ?? string.Empty).Split(Path.PathSeparator))
         {
-            var path = Path.Combine(directory.Trim('"'), "git.exe");
+            var path = Path.Combine(directory.Trim('"'), MapToolPlatform.GitName);
             if (File.Exists(path))
                 return path;
         }
