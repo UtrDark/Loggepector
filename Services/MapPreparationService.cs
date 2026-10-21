@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -21,7 +23,18 @@ public sealed class MapPreparationService : IMapPreparationService
     {
         ".png", ".gif", ".jpg", ".jpeg", ".bmp", ".webp"
     };
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromHours(1) };
+    private readonly HttpClient _http = new(new SocketsHttpHandler
+    {
+        MaxConnectionsPerServer = 16,
+        EnableMultipleHttp2Connections = true,
+        AutomaticDecompression = DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(10)
+    })
+    {
+        Timeout = TimeSpan.FromHours(1),
+        DefaultRequestVersion = HttpVersion.Version20,
+        DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrLower
+    };
     private readonly string _root = Path.Combine(AppContext.BaseDirectory, "MapCache");
     private readonly string _settings = Path.Combine(AppContext.BaseDirectory, "map-tools-settings.json");
 
@@ -71,28 +84,26 @@ public sealed class MapPreparationService : IMapPreparationService
             Directory.CreateDirectory(source);
             var changed = files.Where(file => !state.SourceFiles.TryGetValue(file.Key, out var sha) ||
                 sha != file.Value || !File.Exists(MapCacheFiles.Resolve(source, file.Key))).ToArray();
+            if (changed.Length > 0)
+            {
+                var git = await EnsureGitAsync(progress, cancellationToken);
+                await MapSourceGit.DownloadAsync(git, Repository, branch, commit, Path.Combine(_root, "source.git"),
+                    source, changed, progress, cancellationToken);
+            }
             var completed = 0;
-            progress.Report($"Проверка и загрузка {changed.Length} необходимых файлов рендера…");
             await Parallel.ForEachAsync(changed, new ParallelOptions
             {
-                MaxDegreeOfParallelism = 6,
+                MaxDegreeOfParallelism = 16,
                 CancellationToken = cancellationToken
             }, async (file, token) =>
             {
                 var destination = MapCacheFiles.Resolve(source, file.Key);
-                if (!File.Exists(destination) || !string.Equals(await GetBlobShaAsync(destination, token),
-                        file.Value, StringComparison.OrdinalIgnoreCase))
-                {
-                    var url = $"https://raw.githubusercontent.com/{Repository}/{commit}/" +
-                        string.Join("/", file.Key.Split('/').Select(Uri.EscapeDataString));
-                    var candidate = destination + ".candidate";
-                    await DownloadAsync(url, candidate, token);
-                    await VerifyBlobAsync(candidate, file.Value, token);
-                    File.Move(candidate, destination, true);
-                }
+                var candidate = destination + ".candidate";
+                await VerifyBlobAsync(candidate, file.Value, token);
+                File.Move(candidate, destination, true);
                 var count = Interlocked.Increment(ref completed);
-                if (count % 25 == 0 || count == changed.Length)
-                    progress.Report($"Файлы рендера: {count}/{changed.Length}");
+                if (count % 100 == 0 || count == changed.Length)
+                    progress.Report($"Проверка файлов рендера: {count}/{changed.Length}");
             });
             foreach (var removed in state.SourceFiles.Keys.Except(files.Keys))
                 File.Delete(MapCacheFiles.Resolve(source, removed));
@@ -135,6 +146,46 @@ public sealed class MapPreparationService : IMapPreparationService
             state.Maps.Remove(removed);
         await MapCacheFiles.SaveAsync(statePath, state, cancellationToken);
         progress.Report($"Карты готовы: {maps.Length}. BandaStation {commit[..8]}");
+    }
+
+    private async Task<string> EnsureGitAsync(IProgress<string> progress, CancellationToken cancellationToken)
+    {
+        var bundled = Path.Combine(_root, "tools", "mingit", "cmd", "git.exe");
+        if (File.Exists(bundled))
+            return bundled;
+        if (MapSourceGit.FindExecutable() is { } installed)
+            return installed;
+        progress.Report("Загрузка переносимого MinGit из официального релиза Git for Windows…");
+        using var release = await GetJsonAsync("https://api.github.com/repos/git-for-windows/git/releases/latest", cancellationToken);
+        var asset = release.RootElement.GetProperty("assets").EnumerateArray().Single(item =>
+        {
+            var name = item.GetProperty("name").GetString()!;
+            return name.StartsWith("MinGit-", StringComparison.Ordinal) &&
+                   name.EndsWith("-64-bit.zip", StringComparison.Ordinal) &&
+                   !name.Contains("busybox", StringComparison.OrdinalIgnoreCase);
+        });
+        var digest = asset.GetProperty("digest").GetString()
+            ?? throw new InvalidDataException("GitHub не предоставил SHA256 архива MinGit.");
+        if (!digest.StartsWith("sha256:", StringComparison.Ordinal))
+            throw new InvalidDataException("Неизвестный формат контрольной суммы MinGit.");
+        var package = Path.Combine(_root, "tools", "mingit.zip.candidate");
+        await DownloadAsync(asset.GetProperty("browser_download_url").GetString()!, package, cancellationToken);
+        await using (var stream = File.OpenRead(package))
+        {
+            var actual = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken));
+            if (!string.Equals(actual, digest[7..], StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("SHA256 архива MinGit не совпадает с официальным релизом.");
+        }
+        progress.Report("Распаковка MinGit…");
+        var directory = Path.Combine(_root, "tools", "mingit");
+        var staging = directory + ".partial-" + Guid.NewGuid().ToString("N");
+        await Task.Run(() => ZipFile.ExtractToDirectory(package, staging), cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!File.Exists(Path.Combine(staging, "cmd", "git.exe")))
+            throw new InvalidDataException("Архив MinGit не содержит cmd/git.exe.");
+        Directory.Move(staging, directory);
+        File.Delete(package);
+        return bundled;
     }
 
     private async Task<string> EnsureRendererAsync(IProgress<string> progress, CancellationToken cancellationToken)
