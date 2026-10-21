@@ -12,7 +12,7 @@ using Loggepector.Utils;
 
 namespace Loggepector.Services;
 
-public sealed class LogService : ILogService
+public sealed class LogService(IPlayerJoinService playerJoinService) : ILogService
 {
     private Snapshot? _snapshot;
 
@@ -24,7 +24,13 @@ public sealed class LogService : ILogService
     {
         cancellationToken.ThrowIfCancellationRequested();
         progress?.Report(0);
-        var snapshot = await Task.Run(() => ParseAsync(path, cancellationToken, progress), cancellationToken).ConfigureAwait(false);
+        var snapshot = await Task.Run(async () =>
+        {
+            var parsed = await ParseAsync(path, cancellationToken, progress).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            playerJoinService.Process(parsed.Entries.Where(entry => entry.Type == "MISC"));
+            return parsed;
+        }, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         Volatile.Write(ref _snapshot, snapshot);
         progress?.Report(100);
@@ -36,6 +42,12 @@ public sealed class LogService : ILogService
 
     public IReadOnlyList<string> GetCKeys() =>
         Volatile.Read(ref _snapshot)!.Players.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray();
+
+    public IReadOnlyDictionary<string, IReadOnlyList<PlayerJoin>> GetPlayerJoins() =>
+        playerJoinService.PlayerJoins;
+
+    public IReadOnlyDictionary<string, IReadOnlyList<PlayerAntagonist>> GetPlayerAntagonists() =>
+        playerJoinService.PlayerAntagonists;
 
     public IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, params string[] types) =>
         GetLogs(from, to, types, Array.Empty<string>());
@@ -118,7 +130,6 @@ public sealed class LogService : ILogService
                 @")(?![\p{L}\p{N}_-])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
         var sensitiveKeys = LogMessageSanitizer.CreateKeyPattern(entries);
         sorted = sorted.Select(entry => ((LogEntry)entry) with { SensitiveKeys = sensitiveKeys }).ToArray();
-        progress?.Report(100);
         return new Snapshot(startTime, duration, entries.Count, sorted, players);
     }
 

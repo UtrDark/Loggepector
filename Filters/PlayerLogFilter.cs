@@ -15,7 +15,9 @@ public sealed class PlayerLogFilter : ILogFilter
     {
         _isActive = ckeys.Count > 0;
         _players = ckeys.Select(CKey.Normalize).Distinct()
-            .Where(players.ContainsKey).Select(key => players[key]).ToArray();
+            .Select(key => players.TryGetValue(key, out var pattern) ? pattern : new Regex(
+                @"(?<![\p{L}\p{N}_-])" + Regex.Escape(key) + @"(?![\p{L}\p{N}_-])",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)).ToArray();
     }
 
     public IEnumerable<ILogEntry> Apply(IEnumerable<ILogEntry> entries) =>

@@ -83,6 +83,13 @@ public partial class MainWindow : Window
         viewModel.IsSearchVisible = false;
     }
 
+    private void OpenPlayersInfo(object? sender, RoutedEventArgs e)
+    {
+        var viewModel = (MainWindowViewModel)DataContext!;
+        var window = new PlayersInfoWindow { DataContext = viewModel.CreatePlayersInfo() };
+        window.Show(this);
+    }
+
     private async void OpenLogFile(object? sender, RoutedEventArgs e)
     {
         var viewModel = (MainWindowViewModel)DataContext!;

@@ -47,6 +47,7 @@
                     </Button.Flyout>
                 </Button>
                 <Button Content="Поиск · Ctrl+F" Click="OpenSearch" />
+                <Button Content="PlayersInfo" Click="OpenPlayersInfo" IsEnabled="{Binding CanShowPlayersInfo}" />
             </StackPanel>
             <Button IsEnabled="{Binding CanOpenFile}" HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Left">

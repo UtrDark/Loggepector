@@ -15,11 +15,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanOpenFile))]
+    [NotifyPropertyChangedFor(nameof(CanShowPlayersInfo))]
     [NotifyPropertyChangedFor(nameof(CanSelectTime))]
     private bool _isLoading;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanSelectTime))]
+    [NotifyPropertyChangedFor(nameof(CanShowPlayersInfo))]
     private bool _hasLogs;
 
     [ObservableProperty]
@@ -86,6 +88,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool IsEmpty => Logs.Count == 0;
     public bool CanOpenFile => !IsLoading;
+    public bool CanShowPlayersInfo => HasLogs && !IsLoading;
     public bool CanSelectTime => HasLogs && !IsLoading && MaximumSecond > 0;
     public double SliderMaximum => Math.Max(1, MaximumSecond);
     public string TimeLabel => $"От {TimeSpan.FromSeconds(FromSecond):c} до {TimeSpan.FromSeconds(ToSecond):c} · Всего {TimeSpan.FromSeconds(MaximumSecond):c}";
@@ -94,6 +97,30 @@ public partial class MainWindowViewModel : ViewModelBase
     public MainWindowViewModel(ILogService logService)
     {
         _logService = logService;
+    }
+
+    public PlayersInfoViewModel CreatePlayersInfo() => new(_logService, TogglePlayer, GetPlayer);
+
+    private void TogglePlayer(string cKey)
+    {
+        if (!CanShowPlayersInfo)
+            return;
+
+        var player = GetPlayer(cKey);
+        player.IsSelected = !player.IsSelected;
+    }
+
+    private PlayerViewModel GetPlayer(string cKey)
+    {
+        var key = CKey.Normalize(cKey);
+        var player = Players.FirstOrDefault(item => item.CKey == key);
+        if (player is null)
+        {
+            player = new PlayerViewModel(key, OnPlayerSelectionChanged);
+            Players = Players.Append(player).OrderBy(item => item.CKey, StringComparer.Ordinal).ToArray();
+        }
+
+        return player;
     }
 
     public async Task LoadAsync(string path)

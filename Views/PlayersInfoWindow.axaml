@@ -1,0 +1,94 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Loggepector.ViewModels"
+        x:Class="Loggepector.Views.PlayersInfoWindow"
+        x:DataType="vm:PlayersInfoViewModel"
+        Title="PlayersInfo" Width="1100" Height="850" MinWidth="800" MinHeight="350"
+        RequestedThemeVariant="Light"
+        Background="#F5F6F8" Foreground="#202632" FontFamily="Consolas" FontSize="12"
+        WindowStartupLocation="CenterOwner">
+    <Window.Resources>
+        <DataTemplate x:Key="PlayerCard" x:DataType="vm:PlayerInfoViewModel">
+            <Button Command="{Binding FilterPlayerCommand}" Padding="0" BorderThickness="0"
+                    Background="Transparent" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    Cursor="Hand" ToolTip.Tip="Добавить или убрать игрока из фильтра основного окна">
+            <Border Classes="player-card" Classes.search-match="{Binding IsSearchMatch}" Margin="0,0,8,6"
+                    Classes.selected="{Binding Selection.IsSelected}"
+                    BorderThickness="1" CornerRadius="3">
+                <Border BorderBrush="{Binding Accent}" BorderThickness="3,0,0,0" Padding="9,7">
+                    <StackPanel Spacing="2">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="{Binding Title}" Foreground="{Binding Accent}"
+                                       FontWeight="SemiBold" TextWrapping="Wrap" />
+                            <TextBlock Grid.Column="1" Text="✓" IsVisible="{Binding Selection.IsSelected}"
+                                       Foreground="#2463A6" FontWeight="Bold" Margin="8,0,0,0" />
+                        </Grid>
+                        <TextBlock Text="{Binding Text}" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Subtitle}" Foreground="#5D687A" FontSize="11"
+                                   TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </Border>
+            </Button>
+        </DataTemplate>
+    </Window.Resources>
+    <Window.Styles>
+        <Style Selector="Border.player-card">
+            <Setter Property="Background" Value="#FFFFFF" />
+            <Setter Property="BorderBrush" Value="#D5DAE2" />
+        </Style>
+        <Style Selector="Border.player-card.search-match">
+            <Setter Property="Background" Value="#FFF1B8" />
+            <Setter Property="BorderBrush" Value="#B78012" />
+        </Style>
+        <Style Selector="Border.player-card.selected">
+            <Setter Property="Background" Value="#E5EFFC" />
+            <Setter Property="BorderBrush" Value="#2463A6" />
+        </Style>
+        <Style Selector="Border.player-card.selected.search-match">
+            <Setter Property="Background" Value="#FFF1B8" />
+            <Setter Property="BorderBrush" Value="#2463A6" />
+        </Style>
+    </Window.Styles>
+    <Grid RowDefinitions="Auto,*">
+        <Border Padding="18,12" BorderBrush="#D5DAE2" BorderThickness="0,0,0,1">
+            <TextBox Text="{Binding SearchText, Mode=TwoWay}"
+                     Watermark="Подсветить: ckey, персонаж, должность или роль…" />
+        </Border>
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Margin="18,14,10,18" Spacing="14">
+                <StackPanel Spacing="8" IsVisible="{Binding HasAntagonists}">
+                    <TextBlock Text="ANTAGONISTS" Foreground="#5D687A" />
+                    <ItemsControl ItemsSource="{Binding Antagonists}" ItemTemplate="{StaticResource PlayerCard}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="3" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+                <StackPanel Spacing="10" IsVisible="{Binding HasManifest}">
+                    <TextBlock Text="MANIFEST" Foreground="#5D687A" />
+                    <ItemsControl ItemsSource="{Binding Departments}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PlayerDepartmentViewModel">
+                                <StackPanel Spacing="6" Margin="0,0,0,10">
+                                    <TextBlock Text="{Binding Name}" Foreground="{Binding Accent}" />
+                                    <ItemsControl ItemsSource="{Binding Players}" ItemTemplate="{StaticResource PlayerCard}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <UniformGrid Columns="3" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+        <TextBlock Grid.Row="1" Text="В логе нет данных о ролях игроков" IsVisible="{Binding IsEmpty}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#5D687A" />
+    </Grid>
+</Window>
