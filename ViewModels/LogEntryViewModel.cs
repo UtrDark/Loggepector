@@ -1,16 +1,25 @@
+using System;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Media;
 using Loggepector.Models;
 
 namespace Loggepector.ViewModels;
 
-public partial class LogEntryViewModel(ILogEntry entry) : ViewModelBase
+public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart) : ViewModelBase
 {
     public ILogEntry Entry { get; } = entry;
+
+    public string TimeLabel { get; } = FormatTime(entry.Timestamp - roundStart);
+
+    private static string FormatTime(TimeSpan time) => string.Create(CultureInfo.InvariantCulture,
+        $"{(long)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}.{time.Milliseconds:000}");
 
     public string Message { get; } = entry.GetLogMessage();
 
     public bool IsMultiline => Message.Contains('\n') || Message.Contains('\r');
+
+    public bool HasCoordinates => Entry.HasCoordinates;
 
     public bool HasChannel => Entry.Channel is not null;
 

@@ -48,7 +48,7 @@
                 </Button>
                 <Button Content="Поиск · Ctrl+F" Click="OpenSearch" />
                 <Button Content="PlayersInfo" Click="OpenPlayersInfo" IsEnabled="{Binding CanShowPlayersInfo}" />
-                <Button Content="MapView" Click="OpenMapView" IsEnabled="{Binding CanOpenMap}" ToolTip.Tip="{Binding MapName}" />
+                <Button Content="MapView" Click="OpenMapView" IsEnabled="{Binding CanOpenMap}" />
             </StackPanel>
             <Button IsEnabled="{Binding CanOpenFile}" HorizontalAlignment="Stretch"
                     HorizontalContentAlignment="Left">
@@ -71,6 +71,15 @@
                     </Flyout>
                 </Button.Flyout>
             </Button>
+            <WrapPanel>
+                <CheckBox Content="Соседние того же типа" IsChecked="{Binding CaptureSameType, Mode=TwoWay}" Margin="0,0,8,0" />
+                <NumericUpDown Value="{Binding NeighborCount, Mode=TwoWay}" Minimum="0" Maximum="100"
+                               Increment="1" FormatString="0" Width="140" Margin="0,0,12,0" />
+                <CheckBox Content="По координатам · радиус" IsChecked="{Binding CaptureByCoordinates, Mode=TwoWay}" Margin="0,0,8,0" />
+                <NumericUpDown Value="{Binding CoordinateRadius, Mode=TwoWay}" Minimum="0" Maximum="255"
+                               Increment="1" FormatString="0" Width="140" Margin="0,0,12,0" />
+            </WrapPanel>
+            <TextBlock Text="{Binding ContextStatus}" IsVisible="{Binding HasContextStatus}" Opacity="0.65" />
             <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsSearchVisible}">
                 <TextBox x:Name="SearchBox" Text="{Binding SearchText, Mode=TwoWay}"
                          Watermark="Поиск по тексту в выбранном диапазоне" />
@@ -79,8 +88,9 @@
         </StackPanel>
 
         <Grid Grid.Row="6">
-            <ListBox x:Name="LogsList" ItemsSource="{Binding Logs}" AutoScrollToSelectedItem="False"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox x:Name="LogsList" ItemsSource="{Binding Logs}" SelectedItems="{Binding SelectedLogs, Mode=OneWay}" SelectionMode="Multiple" AutoScrollToSelectedItem="False"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Visible" ScrollViewer.AllowAutoHide="False" Padding="0,0,18,0">
                 <ListBox.Styles>
                     <Style Selector="ScrollViewer">
                         <Setter Property="BringIntoViewOnFocusChange" Value="False" />
@@ -100,8 +110,8 @@
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:LogEntryViewModel">
                         <Grid RowDefinitions="44,Auto" Background="{Binding RowBackground}">
-                            <Grid ColumnDefinitions="110,120,Auto,*,Auto" Margin="8,0">
-                                <TextBlock Text="{Binding Entry.Timestamp, StringFormat='{}{0:HH:mm:ss.fff}'}"
+                            <Grid ColumnDefinitions="110,120,Auto,*,Auto,Auto" Margin="8,0">
+                                <TextBlock Text="{Binding TimeLabel}"
                                            VerticalAlignment="Center" Opacity="0.65" />
                                 <TextBlock Grid.Column="1" Text="{Binding Entry.Type}" FontWeight="SemiBold"
                                            Foreground="{Binding TypeColor}"
@@ -111,7 +121,9 @@
                                            VerticalAlignment="Center" Margin="0,0,8,0" />
                                 <TextBlock Grid.Column="3" Text="{Binding Message}" TextWrapping="NoWrap"
                                            VerticalAlignment="Center" MaxLines="1" TextTrimming="CharacterEllipsis" />
-                                <Button Grid.Column="4" Content="{Binding ExpandLabel}"
+                                <Button Grid.Column="4" Content="⌖" IsVisible="{Binding HasCoordinates}"
+                                        Click="ShowLogOnMap" Margin="8,0,0,0" Padding="6,2" VerticalAlignment="Center" />
+                                <Button Grid.Column="5" Name="ExpandDetailsButton" Content="{Binding ExpandLabel}"
                                               IsVisible="{Binding IsMultiline}"
                                               Click="ToggleLogDetails"
                                               Margin="8,0,0,0" Padding="8,2" VerticalAlignment="Center"

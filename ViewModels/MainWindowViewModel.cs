@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using Loggepector.Models;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -13,6 +15,30 @@ namespace Loggepector.ViewModels;
 
 public partial class MainWindowViewModel : ViewModelBase
 {
+    public ObservableCollection<LogEntryViewModel> SelectedLogs { get; } = new();
+    private int _contextRevision;
+
+    [ObservableProperty]
+    private bool _captureSameType;
+
+    [ObservableProperty]
+    private bool _captureByCoordinates;
+
+    [ObservableProperty]
+    private decimal _neighborCount;
+
+    [ObservableProperty]
+    private decimal _coordinateRadius;
+
+    [ObservableProperty]
+    private bool _isCapturingContext;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasContextStatus))]
+    private string _contextStatus = string.Empty;
+
+    public bool HasContextStatus => !string.IsNullOrEmpty(ContextStatus);
+
     private readonly ILogService _logService;
     private readonly IMapPreparationService _mapPreparation;
     private readonly IMapViewService _mapViewService;
@@ -108,6 +134,8 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    public DateTime RoundStartTime => _logService.StartTime;
+
     public bool IsEmpty => Logs.Count == 0;
     public bool CanOpenFile => !IsLoading;
     public bool CanOpenMap => !IsLoading && !string.IsNullOrWhiteSpace(MapName);
@@ -192,7 +220,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public PlayersInfoViewModel CreatePlayersInfo() => new(_logService, TogglePlayer, GetPlayer);
 
     public MapViewModel CreateMapView() => new(MapName
-        ?? throw new InvalidOperationException("В логе не найдена запись о загрузке карты."), _mapViewService);
+        ?? throw new InvalidOperationException("В логе не найдена запись о загрузке карты."), _mapViewService) { Timeline = this };
 
     private void TogglePlayer(string cKey)
     {
@@ -216,9 +244,32 @@ public partial class MainWindowViewModel : ViewModelBase
         return player;
     }
 
+    partial void OnNeighborCountChanged(decimal value) => RefreshContext();
+
+    partial void OnCoordinateRadiusChanged(decimal value) => RefreshContext();
+
+    partial void OnCaptureSameTypeChanged(bool value) => RefreshContext();
+
+    partial void OnCaptureByCoordinatesChanged(bool value) => RefreshContext();
+
+    private void RefreshContext()
+    {
+        if (HasLogs && !IsLoading)
+            UpdateLogs();
+    }
+
+    private void ResetContext()
+    {
+        _contextRevision++;
+        ContextStatus = string.Empty;
+        IsCapturingContext = false;
+    }
+
     public async Task LoadAsync(string path)
     {
         IsLoading = true;
+        ResetContext();
+        SelectedLogs.Clear();
         ErrorMessage = null;
         LoadProgress = 0;
         var progress = new Progress<int>(value =>
@@ -279,13 +330,54 @@ public partial class MainWindowViewModel : ViewModelBase
             UpdateLogs();
     }
 
-    private void UpdateLogs()
+    private void UpdateLogs() => _ = UpdateLogsAsync();
+
+    private async Task UpdateLogsAsync()
     {
+        var revision = ++_contextRevision;
         var from = TimeSpan.FromSeconds(FromSecond);
         var to = TimeSpan.FromSeconds(ToSecond);
         var types = LogTypes.Where(type => type.IsSelected).Select(type => type.Type).ToArray();
         var players = Players.Where(player => player.IsSelected).Select(player => player.CKey).ToArray();
-        Logs = _logService.GetLogs(from, to, types, players, SearchText)
-            .Select(entry => new LogEntryViewModel(entry)).ToArray();
+        var capture = CaptureSameType || CaptureByCoordinates;
+        var sameType = CaptureSameType;
+        var byCoordinates = CaptureByCoordinates;
+        var count = (int)Math.Clamp(NeighborCount, 0, 100);
+        var radius = (double)Math.Clamp(CoordinateRadius, 0, 255);
+        IsCapturingContext = capture;
+        ErrorMessage = null;
+        try
+        {
+            var filtered = _logService.GetLogs(from, to, types, players, SearchText);
+            IReadOnlyList<ILogEntry> entries = filtered;
+            if (capture)
+            {
+                var candidates = _logService.GetLogs(from, to);
+                entries = await Task.Run(() => LogNeighbors.Find(candidates, filtered,
+                    sameType, byCoordinates, count, radius));
+            }
+            if (revision != _contextRevision)
+                return;
+            var previous = Logs.ToDictionary(log => log.Entry.LineNumber);
+            var selected = SelectedLogs.Select(log => log.Entry.LineNumber).ToHashSet();
+            Logs = entries.Select(entry => previous.TryGetValue(entry.LineNumber, out var log) && ReferenceEquals(log.Entry, entry)
+                ? log : new LogEntryViewModel(entry, RoundStartTime)).ToArray();
+            SelectedLogs.Clear();
+            foreach (var log in Logs.Where(log => selected.Contains(log.Entry.LineNumber)))
+                SelectedLogs.Add(log);
+            ContextStatus = capture
+                ? $"По фильтрам: {filtered.Count}. Добавлено соседних: {entries.Count - filtered.Count}."
+                : string.Empty;
+        }
+        catch (Exception exception)
+        {
+            if (revision == _contextRevision)
+                ErrorMessage = exception.Message;
+        }
+        finally
+        {
+            if (revision == _contextRevision)
+                IsCapturingContext = false;
+        }
     }
 }

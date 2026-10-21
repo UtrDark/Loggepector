@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Loggepector.Models;
@@ -51,7 +52,13 @@ public sealed class MapViewService : IMapViewService
             var layer = config.RootElement.TryGetProperty("main_floor", out var floor) ? floor.GetInt32() : 1;
             if (!tiles.Any(tile => tile.Chunk.Z == layer))
                 throw new InvalidDataException($"Начальный слой Z={layer} отсутствует в рендере {name}.");
-            return new MapDocument(name, 32, 1024, layer, tiles.ToArray());
+            var centcom = await File.ReadAllTextAsync(Path.Combine(root, "source", "_maps", "map_files", "generic", "CentCom.dmm"),
+                cancellationToken);
+            var levels = Regex.Matches(centcom, @"^\([ \t]*[0-9]+[ \t]*,[ \t]*[0-9]+[ \t]*,[ \t]*(?<z>[0-9]+)[ \t]*\)",
+                RegexOptions.Multiline).Cast<Match>().Select(match => int.Parse(match.Groups["z"].Value)).ToArray();
+            if (levels.Length == 0)
+                throw new InvalidDataException("Не удалось определить смещение Z-уровней станции по CentCom.dmm.");
+            return new MapDocument(name, 32, 1024, layer, tiles.ToArray(), levels.Max());
         }
         throw new InvalidOperationException($"Карта «{mapName}» не найдена в конфигурациях BandaStation.");
     }

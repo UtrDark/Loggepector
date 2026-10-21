@@ -22,6 +22,22 @@ public sealed class MapViewport : Panel
         AvaloniaProperty.Register<MapViewport, int>(nameof(SelectedLayer), 1);
     public static readonly StyledProperty<double> ZoomProperty =
         AvaloniaProperty.Register<MapViewport, double>(nameof(Zoom), 0.125);
+    public static readonly StyledProperty<MapLocation?> FocusLocationProperty =
+        AvaloniaProperty.Register<MapViewport, MapLocation?>(nameof(FocusLocation));
+
+    public static readonly StyledProperty<MapLogIndex?> LogIndexProperty =
+        AvaloniaProperty.Register<MapViewport, MapLogIndex?>(nameof(LogIndex));
+
+    public MapLogIndex? LogIndex
+    {
+        get => GetValue(LogIndexProperty);
+        set => SetValue(LogIndexProperty, value);
+    }
+
+    private readonly MapLogLayer _markers = new() { IsHitTestVisible = false };
+    private Point? _pressPoint;
+    private bool _dragged;
+    public event Action<MapLogPoint>? MarkerClicked;
 
     private const long CacheBudget = 192L * 1024 * 1024;
     private readonly Dictionary<TileKey, CachedTile> _cache = new();
@@ -36,6 +52,7 @@ public sealed class MapViewport : Panel
     private bool _loading;
     private bool _loadFailed;
     private bool _fitted;
+    private bool _focusPending;
 
     public event Action<string>? LoadFailed;
 
@@ -57,6 +74,12 @@ public sealed class MapViewport : Panel
         set => SetValue(ZoomProperty, value);
     }
 
+    public MapLocation? FocusLocation
+    {
+        get => GetValue(FocusLocationProperty);
+        set => SetValue(FocusLocationProperty, value);
+    }
+
     public MapViewport()
     {
         ClipToBounds = true;
@@ -69,19 +92,20 @@ public sealed class MapViewport : Panel
                 Fit();
             else
                 Refresh();
+            TryFocusLocation();
         };
     }
 
     protected override Size MeasureOverride(Size availableSize)
     {
-        foreach (var layer in _layers.Values)
+        foreach (var layer in Children)
             layer.Measure(availableSize);
         return default;
     }
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        foreach (var layer in _layers.Values)
+        foreach (var layer in Children)
             layer.Arrange(new Rect(finalSize));
         return finalSize;
     }
@@ -102,11 +126,36 @@ public sealed class MapViewport : Panel
                     _layers.Add(z, layer);
                     Children.Add(layer);
                 }
+            Children.Add(_markers);
             Fit();
+            _focusPending = FocusLocation is not null;
+            TryFocusLocation();
             Refresh();
         }
-        else if (change.Property == SelectedLayerProperty || change.Property == ZoomProperty)
+        else if (change.Property == FocusLocationProperty)
+        {
+            _focusPending = true;
+            TryFocusLocation();
+        }
+        else if (change.Property == SelectedLayerProperty || change.Property == ZoomProperty || change.Property == LogIndexProperty)
             Refresh();
+    }
+
+    private void TryFocusLocation()
+    {
+        if (!_focusPending || Document is not { } map || FocusLocation is not { } location ||
+            Bounds.Width <= 0 || Bounds.Height <= 0)
+            return;
+        _focusPending = false;
+        if (!map.Layers.Contains(location.Z - map.WorldZOffset) || location.X < 1 || location.Y < 1 ||
+            location.X > map.Width / map.TileSize || location.Y > map.Height / map.TileSize)
+            return;
+        const double zoom = 0.8;
+        var x = (location.X - 0.5) * map.TileSize;
+        var y = map.Height - (location.Y - 0.5) * map.TileSize;
+        _offset = new Vector(Bounds.Width / 2 - x * zoom, Bounds.Height / 2 - y * zoom);
+        SetCurrentValue(ZoomProperty, zoom);
+        Refresh();
     }
 
     public void Fit()
@@ -138,6 +187,8 @@ public sealed class MapViewport : Panel
         if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
             return;
         _dragPoint = e.GetPosition(this);
+        _pressPoint = _dragPoint;
+        _dragged = false;
         e.Pointer.Capture(this);
         e.Handled = true;
     }
@@ -148,6 +199,10 @@ public sealed class MapViewport : Panel
         if (_dragPoint is not { } previous)
             return;
         var point = e.GetPosition(this);
+        if (_pressPoint is { } start && Math.Pow(point.X - start.X, 2) + Math.Pow(point.Y - start.Y, 2) > 4 * 4)
+            _dragged = true;
+        if (!_dragged)
+            return;
         _offset += point - previous;
         _dragPoint = point;
         Refresh();
@@ -157,8 +212,11 @@ public sealed class MapViewport : Panel
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
+        var clicked = _dragPoint.HasValue && !_dragged ? _markers.Hit(e.GetPosition(this)) : null;
         _dragPoint = null;
         e.Pointer.Capture(null);
+        if (clicked is not null)
+            MarkerClicked?.Invoke(clicked);
     }
 
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
@@ -181,6 +239,7 @@ public sealed class MapViewport : Panel
         if (Document is not { } map || Bounds.Width <= 0 || Bounds.Height <= 0)
         {
             _visible = Array.Empty<MapViewTile>();
+            _markers.Update(Array.Empty<MapLogPoint>(), _ => default, Zoom);
             UpdateLayers();
             return;
         }
@@ -208,6 +267,13 @@ public sealed class MapViewport : Panel
             .ThenBy(tile => Math.Abs((tile.Chunk.Column + 0.5) * map.ChunkSize - visible.Center.X) +
                             Math.Abs((tile.Chunk.Row + 0.5) * map.ChunkSize - visible.Center.Y)).ToArray();
         UpdateLayers();
+        var points = LogIndex?.Query(SelectedLayer + map.WorldZOffset,
+            Math.Max(1, -_offset.X / Zoom / map.TileSize),
+            Math.Max(1, (map.Height - (Bounds.Height - _offset.Y) / Zoom) / map.TileSize),
+            Math.Min(map.Width / map.TileSize, (Bounds.Width - _offset.X) / Zoom / map.TileSize + 1),
+            Math.Min(map.Height / map.TileSize, (map.Height + _offset.Y / Zoom) / map.TileSize + 1)) ?? Array.Empty<MapLogPoint>();
+        _markers.Update(points, point => new Point(_offset.X + (point.X - 0.5) * map.TileSize * Zoom,
+            _offset.Y + (map.Height - (point.Y - 0.5) * map.TileSize) * Zoom), Zoom);
         TrimCache();
         if (!_loading && !_loadFailed)
             _ = LoadVisibleAsync();

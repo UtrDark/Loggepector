@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Threading;
 using Avalonia;
 using Avalonia.VisualTree;
@@ -9,12 +11,15 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.Platform.Storage;
 using Loggepector.ViewModels;
+using Loggepector.Models;
 
 namespace Loggepector.Views;
 
 public partial class MainWindow : Window
 {
     private readonly CancellationTokenSource _mapPreparationCancellation = new();
+    private MapViewWindow? _mapWindow;
+    private readonly List<PlayersInfoWindow> _playerWindows = new();
 
     public MainWindow()
     {
@@ -23,6 +28,9 @@ public partial class MainWindow : Window
         Opened += InitializeMapTools;
         Closed += (_, _) =>
         {
+            _mapWindow?.Close();
+            foreach (var window in _playerWindows.ToArray())
+                window.Close();
             _mapPreparationCancellation.Cancel();
             var viewModel = (MainWindowViewModel)DataContext!;
             viewModel.EnableMapToolsCommand.Cancel();
@@ -63,7 +71,7 @@ public partial class MainWindow : Window
         {
             var focusedContainer = LogsList.ContainerFromIndex(index);
             focusedContainer.GetVisualDescendants().OfType<Button>()
-                .Single(control => ReferenceEquals(control.DataContext, entry)).Focus();
+                .Single(control => ReferenceEquals(control.DataContext, entry) && control.Name == "ExpandDetailsButton").Focus();
         }
 
         e.Handled = true;
@@ -100,18 +108,58 @@ public partial class MainWindow : Window
         viewModel.IsSearchVisible = false;
     }
 
-    private void OpenMapView(object? sender, RoutedEventArgs e)
+    private void OpenMapView(object? sender, RoutedEventArgs e) => GetMapWindow().Activate();
+
+    private MapViewWindow GetMapWindow()
     {
         var viewModel = (MainWindowViewModel)DataContext!;
-        var window = new MapViewWindow { DataContext = viewModel.CreateMapView() };
-        window.Show(this);
+        if (_mapWindow is { DataContext: MapViewModel map } existing && map.MapName == viewModel.MapName)
+            return existing;
+        _mapWindow?.Close();
+        var mapModel = viewModel.CreateMapView();
+        var window = new MapViewWindow { DataContext = mapModel };
+        async void UpdateMapLogs(object? source, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(MainWindowViewModel.Logs))
+                await mapModel.UpdateLogsAsync(viewModel.Logs.Select(log => log.Entry).ToArray());
+        }
+        viewModel.PropertyChanged += UpdateMapLogs;
+        _ = mapModel.UpdateLogsAsync(viewModel.Logs.Select(log => log.Entry).ToArray());
+        _mapWindow = window;
+        window.Closed += (_, _) =>
+        {
+            viewModel.PropertyChanged -= UpdateMapLogs;
+            if (ReferenceEquals(_mapWindow, window))
+                _mapWindow = null;
+        };
+        window.Show();
+        return window;
+    }
+
+    private void ShowLogOnMap(object? sender, RoutedEventArgs e)
+    {
+        var viewModel = (MainWindowViewModel)DataContext!;
+        if (!viewModel.CanOpenMap)
+        {
+            viewModel.ErrorMessage = "В логе не найдена карта станции или ещё идёт загрузка.";
+            return;
+        }
+        var entry = (LogEntryViewModel)((Button)sender!).DataContext!;
+        var coordinates = entry.Entry.GetCoordinates()
+            ?? throw new InvalidOperationException("У записи отсутствуют координаты.");
+        var window = GetMapWindow();
+        ((MapViewModel)window.DataContext!).FocusLocation = new MapLocation(coordinates.X, coordinates.Y, coordinates.Z);
+        window.Activate();
+        e.Handled = true;
     }
 
     private void OpenPlayersInfo(object? sender, RoutedEventArgs e)
     {
         var viewModel = (MainWindowViewModel)DataContext!;
         var window = new PlayersInfoWindow { DataContext = viewModel.CreatePlayersInfo() };
-        window.Show(this);
+        _playerWindows.Add(window);
+        window.Closed += (_, _) => _playerWindows.Remove(window);
+        window.Show();
     }
 
     private async void OpenLogFile(object? sender, RoutedEventArgs e)

@@ -10,6 +10,7 @@ public interface ILogService
 {
     int Count { get; }
     TimeSpan Duration { get; }
+    DateTime StartTime { get; }
     string? MapName { get; }
     Task LoadAsync(string path, CancellationToken cancellationToken = default, IProgress<int>? progress = null);
     IReadOnlyList<string> GetTypes();

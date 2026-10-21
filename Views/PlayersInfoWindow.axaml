@@ -6,7 +6,7 @@
         Title="PlayersInfo" Width="1100" Height="850" MinWidth="800" MinHeight="350"
         RequestedThemeVariant="Light"
         Background="#F5F6F8" Foreground="#202632" FontFamily="Consolas" FontSize="12"
-        WindowStartupLocation="CenterOwner">
+        WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <DataTemplate x:Key="PlayerCard" x:DataType="vm:PlayerInfoViewModel">
             <Button Command="{Binding FilterPlayerCommand}" Padding="0" BorderThickness="0"

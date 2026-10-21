@@ -2,32 +2,67 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Loggepector.ViewModels"
         xmlns:views="using:Loggepector.Views"
+        xmlns:rs="using:RangeSlider.Avalonia.Controls"
         x:Class="Loggepector.Views.MapViewWindow"
         x:DataType="vm:MapViewModel"
         Title="{Binding MapName, StringFormat='MapView · {0}'}"
         Width="1200" Height="850" MinWidth="700" MinHeight="450"
-        WindowStartupLocation="CenterOwner">
-    <Grid ClipToBounds="True">
-        <views:MapViewport x:Name="Viewport" Document="{Binding Document}"
-                           SelectedLayer="{Binding SelectedLayer}" Zoom="{Binding Zoom, Mode=TwoWay}"
-                           ToolTip.Tip="Перемещение — мышью, масштаб — колесом, вписать карту — двойной клик" />
-        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"
-                Background="#EFFFFFFF" CornerRadius="6" Padding="10">
-            <StackPanel Spacing="6">
-                <TextBlock Text="{Binding MapName}" Foreground="#202632" FontWeight="SemiBold" />
-                <Button Content="↑" Command="{Binding LayerUpCommand}" Width="34" Height="32"
-                        HorizontalContentAlignment="Center" ToolTip.Tip="На слой выше" />
-                <TextBlock Text="{Binding SelectedLayer, StringFormat='Z: {0}'}" Foreground="#5D687A" />
-                <Button Content="↓" Command="{Binding LayerDownCommand}" Width="34" Height="32"
-                        HorizontalContentAlignment="Center" ToolTip.Tip="На слой ниже" />
+        WindowStartupLocation="CenterScreen">
+    <Grid RowDefinitions="Auto,*">
+        <Border Padding="16,10" Background="#F5FFFFFF">
+            <StackPanel Spacing="4">
+                <rs:RangeSlider Minimum="0" Maximum="{Binding Timeline.SliderMaximum}"
+                                LowerSelectedValue="{Binding Timeline.FromSecond, Mode=TwoWay}"
+                                UpperSelectedValue="{Binding Timeline.ToSecond, Mode=TwoWay}"
+                                TickFrequency="1" IsSnapToTickEnabled="True" IsThumbOverlap="True"
+                                IsEnabled="{Binding Timeline.CanSelectTime}" />
             </StackPanel>
         </Border>
-        <Border IsVisible="{Binding HasStatus}" HorizontalAlignment="Center" VerticalAlignment="Bottom"
-                Margin="16" Padding="12" CornerRadius="6" Background="#F5FFFFFF" MaxWidth="650">
-            <StackPanel Spacing="8">
-                <TextBlock Text="{Binding Status}" Foreground="#202632" TextWrapping="Wrap" />
-                <Button Content="Повторить загрузку" Click="ReloadMap" HorizontalAlignment="Center" />
-            </StackPanel>
-        </Border>
+        <Grid Grid.Row="1" ClipToBounds="True">
+            <views:MapViewport x:Name="Viewport" Document="{Binding Document}"
+                               FocusLocation="{Binding FocusLocation}" LogIndex="{Binding LogIndex}"
+                               SelectedLayer="{Binding SelectedLayer}" Zoom="{Binding Zoom, Mode=TwoWay}" />
+            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"
+                    Background="#EFFFFFFF" CornerRadius="6" Padding="10">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding MapName}" Foreground="#202632" FontWeight="SemiBold" />
+                    <Button Content="↑" Command="{Binding LayerUpCommand}" Width="34" Height="32"
+                            HorizontalContentAlignment="Center" />
+                    <TextBlock Text="{Binding SelectedLayer, StringFormat='Z: {0}'}" Foreground="#5D687A" />
+                    <Button Content="↓" Command="{Binding LayerDownCommand}" Width="34" Height="32"
+                            HorizontalContentAlignment="Center" />
+                </StackPanel>
+            </Border>
+            <Border IsVisible="{Binding HasSelectedPoint}" HorizontalAlignment="Right" Margin="12"
+                    Width="400" Background="#F5FFFFFF" Padding="12" CornerRadius="6">
+                <Grid RowDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                        <TextBlock Text="{Binding SelectedPoint.Name}" TextWrapping="Wrap" Foreground="#202632" />
+                        <Button Grid.Column="1" Content="×" Command="{Binding ClosePointCommand}" Margin="8,0,0,0" />
+                    </Grid>
+                    <ListBox Grid.Row="1" ItemsSource="{Binding PointEntries}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="vm:LogEntryViewModel">
+                                <StackPanel Margin="0,4" Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding TimeLabel}" />
+                                        <TextBlock Text="{Binding Entry.Type}" Foreground="{Binding TypeColor}" />
+                                    </StackPanel>
+                                    <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Grid>
+            </Border>
+            <Border IsVisible="{Binding HasStatus}" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                    Margin="16" Padding="12" CornerRadius="6" Background="#F5FFFFFF" MaxWidth="650">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="{Binding Status}" Foreground="#202632" TextWrapping="Wrap" />
+                    <Button Content="Повторить загрузку" Click="ReloadMap" HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+        </Grid>
     </Grid>
 </Window>

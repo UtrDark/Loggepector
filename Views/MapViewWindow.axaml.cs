@@ -14,6 +14,7 @@ public partial class MapViewWindow : Window
     {
         InitializeComponent();
         Viewport.LoadFailed += message => ((MapViewModel)DataContext!).Status = message;
+        Viewport.MarkerClicked += point => ((MapViewModel)DataContext!).ShowPoint(point);
         Opened += LoadMap;
         Closed += (_, _) => _lifetime.Cancel();
     }

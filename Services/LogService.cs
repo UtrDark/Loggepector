@@ -20,6 +20,9 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
 
     public int Count => Volatile.Read(ref _snapshot)?.Count ?? 0;
 
+    public DateTime StartTime => (Volatile.Read(ref _snapshot)
+        ?? throw new InvalidOperationException("Лог ещё не загружен.")).StartTime;
+
     public TimeSpan Duration => Volatile.Read(ref _snapshot)?.Duration ?? TimeSpan.Zero;
 
     public string? MapName => Volatile.Read(ref _snapshot)?.MapName;
