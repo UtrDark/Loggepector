@@ -150,6 +150,9 @@ public sealed class MapPreparationService : IMapPreparationService
 
     private async Task<string> EnsureGitAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
+        if (!OperatingSystem.IsWindows())
+            return MapSourceGit.FindExecutable()
+                ?? throw new FileNotFoundException("Для загрузки карт на Linux нужен Git в PATH. Установите пакет git.");
         var bundled = Path.Combine(_root, "tools", "mingit", "cmd", "git.exe");
         if (File.Exists(bundled))
             return bundled;
@@ -190,16 +193,20 @@ public sealed class MapPreparationService : IMapPreparationService
 
     private async Task<string> EnsureRendererAsync(IProgress<string> progress, CancellationToken cancellationToken)
     {
-        if (!OperatingSystem.IsWindows() || !Environment.Is64BitOperatingSystem)
-            throw new PlatformNotSupportedException("Автозагрузка рендера поддерживается на Windows x64.");
-        var renderer = Path.Combine(_root, "tools", "dmm-tools.exe");
+        var name = MapToolPlatform.RendererName;
+        var renderer = Path.Combine(_root, "tools", name);
         if (File.Exists(renderer))
+        {
+            MapToolPlatform.MakeExecutable(renderer);
             return renderer;
+        }
         progress.Report("Загрузка dmm-tools из официального релиза SpacemanDMM…");
         using var release = await GetJsonAsync("https://api.github.com/repos/SpaceManiac/SpacemanDMM/releases/latest",
             cancellationToken);
-        var asset = release.RootElement.GetProperty("assets").EnumerateArray().Single(item =>
-            string.Equals(item.GetProperty("name").GetString(), "dmm-tools.exe", StringComparison.OrdinalIgnoreCase));
+        var asset = release.RootElement.GetProperty("assets").EnumerateArray().FirstOrDefault(item =>
+            string.Equals(item.GetProperty("name").GetString(), name, StringComparison.Ordinal));
+        if (asset.ValueKind == JsonValueKind.Undefined)
+            throw new InvalidDataException($"В официальном релизе SpacemanDMM отсутствует рендерер {name} для текущей ОС.");
         var candidate = renderer + ".candidate";
         await DownloadAsync(asset.GetProperty("browser_download_url").GetString()!, candidate, cancellationToken);
         var expected = asset.GetProperty("digest").GetString()
@@ -212,6 +219,7 @@ public sealed class MapPreparationService : IMapPreparationService
             if (!string.Equals(actual, expected[7..], StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("SHA256 скачанного dmm-tools не совпадает с релизом.");
         }
+        MapToolPlatform.MakeExecutable(candidate);
         File.Move(candidate, renderer, true);
         return renderer;
     }

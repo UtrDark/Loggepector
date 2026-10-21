@@ -1,0 +1,162 @@
+name: Desktop build
+
+on:
+  push:
+    branches: [build]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing GitHub tag to release (for example v0.0.3); leave empty for artifacts only"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-build-${{ github.ref }}-${{ inputs.release_tag }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  prepare:
+    name: Resolve build version
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      ref: ${{ steps.version.outputs.ref }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Resolve and verify release tag
+        id: version
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_RELEASE_TAG:-}"
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then tag="${GITHUB_REF#refs/tags/}"; fi
+          if [[ -n "$tag" ]]; then
+            if [[ ! "$tag" =~ ^v[0-9][0-9A-Za-z._-]*$ ]]; then echo 'Release tag must start with v and contain a version.' >&2; exit 1; fi
+            if ! gh api "repos/$GH_REPO/git/ref/tags/$tag" > /dev/null; then
+              echo 'Tag is not available on GitHub. In GitKraken use Tags -> right-click the tag -> Push tag -> origin.' >&2
+              exit 1
+            fi
+            echo "ref=refs/tags/$tag" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: ${{ matrix.rid }} / ${{ matrix.mode }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            rid: win-x64
+            mode: aot
+            profile: NativeAot
+          - runner: windows-2022
+            rid: win-x64
+            mode: singlefile
+            profile: SingleFile
+          - runner: ubuntu-22.04
+            rid: linux-x64
+            mode: aot
+            profile: NativeAot
+          - runner: ubuntu-22.04
+            rid: linux-x64
+            mode: singlefile
+            profile: SingleFile
+
+    steps:
+      - name: Checkout selected version
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.ref }}
+          persist-credentials: false
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install Linux AOT prerequisites
+        if: runner.os == 'Linux' && matrix.mode == 'aot'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev
+
+      - name: Publish
+        shell: pwsh
+        run: |
+          if (-not (Test-Path -LiteralPath "Properties/PublishProfiles/${{ matrix.profile }}.pubxml")) { throw "Publish profile is missing from the selected commit." }
+          dotnet publish Loggepector.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishProfile=${{ matrix.profile }} -o "artifacts/${{ matrix.rid }}/${{ matrix.mode }}"
+          if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
+
+      - name: Package Windows ZIP
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path packages -Force | Out-Null
+          Compress-Archive -Path "artifacts/${{ matrix.rid }}/${{ matrix.mode }}/*" -DestinationPath "packages/Loggepector-${{ matrix.rid }}-${{ matrix.mode }}.zip" -CompressionLevel Optimal
+
+      - name: Package Linux archive
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p packages
+          tar -czf "packages/Loggepector-${{ matrix.rid }}-${{ matrix.mode }}.tar.gz" -C "artifacts/${{ matrix.rid }}/${{ matrix.mode }}" .
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: build-${{ matrix.rid }}-${{ matrix.mode }}
+          path: packages/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  release:
+    name: Publish GitHub Release
+    needs: [prepare, publish]
+    if: needs.prepare.outputs.tag != ''
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      BUILD_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: Download release archives
+        shell: bash
+        run: gh run download "$BUILD_RUN_ID" --pattern "build-*" --dir release-files
+
+      - name: Create release and attach archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' archives < <(find release-files -type f \( -name '*.zip' -o -name '*.tar.gz' \) -print0)
+          if [[ "${#archives[@]}" -ne 4 ]]; then echo "Expected four build archives." >&2; exit 1; fi
+          if gh release view "$RELEASE_TAG" --json url; then
+            gh release upload "$RELEASE_TAG" "${archives[@]}" --clobber
+          else
+            gh release create "$RELEASE_TAG" "${archives[@]}" --verify-tag --generate-notes --title "$RELEASE_TAG"
+          fi
