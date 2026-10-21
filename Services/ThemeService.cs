@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.Json;
 using Avalonia;
+using Loggepector.Models;
 using Avalonia.Styling;
 
 namespace Loggepector.Services;
@@ -14,7 +15,7 @@ public sealed class ThemeService : IThemeService
 
     public void Load()
     {
-        var theme = File.Exists(_path) ? JsonSerializer.Deserialize<string>(File.ReadAllText(_path)) : "Light";
+        var theme = File.Exists(_path) ? JsonSerializer.Deserialize(File.ReadAllText(_path), AppJsonContext.Default.String) : "Light";
         IsDark = theme switch
         {
             "Light" => false,
@@ -27,7 +28,7 @@ public sealed class ThemeService : IThemeService
     public void SetTheme(bool isDark)
     {
         var temporary = _path + ".tmp";
-        File.WriteAllText(temporary, JsonSerializer.Serialize(isDark ? "Dark" : "Light"));
+        File.WriteAllText(temporary, JsonSerializer.Serialize(isDark ? "Dark" : "Light", AppJsonContext.Default.String));
         File.Move(temporary, _path, true);
         IsDark = isDark;
         Apply();

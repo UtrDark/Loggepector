@@ -34,7 +34,6 @@ public partial class MainWindow : Window
             _mapPreparationCancellation.Cancel();
             var viewModel = (MainWindowViewModel)DataContext!;
             viewModel.EnableMapToolsCommand.Cancel();
-            viewModel.DisableMapToolsCommand.Cancel();
         };
     }
 
@@ -113,7 +112,7 @@ public partial class MainWindow : Window
     private MapViewWindow GetMapWindow()
     {
         var viewModel = (MainWindowViewModel)DataContext!;
-        if (_mapWindow is { DataContext: MapViewModel map } existing && map.MapName == viewModel.MapName)
+        if (_mapWindow is { DataContext: MapViewModel map } existing && map.MapName == (viewModel.MapName ?? string.Empty))
             return existing;
         _mapWindow?.Close();
         var mapModel = viewModel.CreateMapView();
@@ -139,7 +138,7 @@ public partial class MainWindow : Window
     private void ShowLogOnMap(object? sender, RoutedEventArgs e)
     {
         var viewModel = (MainWindowViewModel)DataContext!;
-        if (!viewModel.CanOpenMap)
+        if (!viewModel.CanOpenMap || string.IsNullOrWhiteSpace(viewModel.MapName))
         {
             viewModel.ErrorMessage = "В логе не найдена карта станции или ещё идёт загрузка.";
             return;

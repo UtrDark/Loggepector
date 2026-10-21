@@ -9,12 +9,13 @@ public static class ProjectScope
     public static IContainer Build()
     {
         var builder = new ContainerBuilder();
-        builder.RegisterType<ThemeService>().As<IThemeService>().SingleInstance();
-        builder.RegisterType<PlayerJoinService>().As<IPlayerJoinService>().SingleInstance();
-        builder.RegisterType<LogService>().As<ILogService>().SingleInstance();
-        builder.RegisterType<MapPreparationService>().As<IMapPreparationService>().SingleInstance();
-        builder.RegisterType<MapViewService>().As<IMapViewService>().SingleInstance();
-        builder.RegisterType<MainWindowViewModel>().SingleInstance();
+        builder.Register(_ => new ThemeService()).As<IThemeService>().SingleInstance();
+        builder.Register(_ => new PlayerJoinService()).As<IPlayerJoinService>().SingleInstance();
+        builder.Register(scope => new LogService(scope.Resolve<IPlayerJoinService>())).As<ILogService>().SingleInstance();
+        builder.Register(_ => new MapPreparationService()).As<IMapPreparationService>().SingleInstance();
+        builder.Register(_ => new MapViewService()).As<IMapViewService>().SingleInstance();
+        builder.Register(scope => new MainWindowViewModel(scope.Resolve<ILogService>(),
+            scope.Resolve<IMapPreparationService>(), scope.Resolve<IMapViewService>(), scope.Resolve<IThemeService>())).SingleInstance();
         return builder.Build();
     }
 }

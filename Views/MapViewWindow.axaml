@@ -10,7 +10,13 @@
         WindowStartupLocation="CenterScreen">
     <Grid RowDefinitions="Auto,*">
         <Border Padding="16,10" Background="{DynamicResource AppPanelBrush}">
-            <StackPanel Spacing="4">
+            <StackPanel Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <Button Content="Включить и скачать" Command="{Binding EnableMapToolsCommand}"
+                            IsEnabled="{Binding !Timeline.IsMapToolsBusy}" IsVisible="{Binding !Timeline.AreMapsReady}" />
+                    <TextBlock Text="{Binding Timeline.MapToolsStatus}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                </StackPanel>
+                <ProgressBar IsIndeterminate="True" Height="4" IsVisible="{Binding Timeline.IsMapToolsBusy}" />
                 <rs:RangeSlider Minimum="0" Maximum="{Binding Timeline.SliderMaximum}"
                                 LowerSelectedValue="{Binding Timeline.FromSecond, Mode=TwoWay}"
                                 UpperSelectedValue="{Binding Timeline.ToSecond, Mode=TwoWay}"
@@ -60,7 +66,6 @@
                     Margin="16" Padding="12" CornerRadius="6" Background="{DynamicResource AppPanelBrush}" MaxWidth="650">
                 <StackPanel Spacing="8">
                     <TextBlock Text="{Binding Status}" Foreground="{DynamicResource AppTextBrush}" TextWrapping="Wrap" />
-                    <Button Content="Повторить загрузку" Click="ReloadMap" HorizontalAlignment="Center" />
                 </StackPanel>
             </Border>
         </Grid>

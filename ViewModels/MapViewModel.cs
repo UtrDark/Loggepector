@@ -95,8 +95,20 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
     private bool CanLayerUp => Document is not null && !IsLoading && Layers.Any(z => z > SelectedLayer);
     private bool CanLayerDown => Document is not null && !IsLoading && Layers.Any(z => z < SelectedLayer);
 
+    [RelayCommand]
+    private async Task EnableMapTools(CancellationToken cancellationToken)
+    {
+        await Timeline.EnableMapToolsCommand.ExecuteAsync(null);
+        await LoadAsync(cancellationToken);
+    }
+
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(MapName))
+        {
+            Status = "Откройте лог с названием карты станции.";
+            return;
+        }
         IsLoading = true;
         Document = null;
         Status = "Загрузка карты…";

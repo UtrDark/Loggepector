@@ -70,17 +70,17 @@ public partial class MainWindowViewModel : ViewModelBase
     private string? _mapName;
 
     [ObservableProperty]
-    private bool _isMapToolsPromptVisible;
-
-    [ObservableProperty]
     private string _mapToolsStatus = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(EnableMapToolsCommand))]
-    [NotifyCanExecuteChangedFor(nameof(DisableMapToolsCommand))]
     private bool _isMapToolsBusy;
 
-    private bool CanChooseMapTools => !IsMapToolsBusy;
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(EnableMapToolsCommand))]
+    private bool _areMapsReady;
+
+    private bool CanChooseMapTools => !IsMapToolsBusy && !AreMapsReady;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanOpenFile))]
@@ -160,7 +160,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool IsEmpty => Logs.Count == 0;
     public bool CanOpenFile => !IsLoading;
-    public bool CanOpenMap => !IsLoading && !string.IsNullOrWhiteSpace(MapName);
+    public bool CanOpenMap => !IsLoading;
     public bool CanShowPlayersInfo => HasLogs && !IsLoading;
     public bool CanSelectTime => HasLogs && !IsLoading && MaximumSecond > 0;
     public double SliderMaximum => Math.Max(1, MaximumSecond);
@@ -181,7 +181,6 @@ public partial class MainWindowViewModel : ViewModelBase
         try
         {
             var choice = await _mapPreparation.GetChoiceAsync(cancellationToken);
-            IsMapToolsPromptVisible = choice is null;
             if (choice == true)
                 await PrepareMapsAsync(cancellationToken);
         }
@@ -196,22 +195,13 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand(CanExecute = nameof(CanChooseMapTools))]
-    private Task EnableMapTools(CancellationToken cancellationToken) => SetMapToolsChoiceAsync(true, cancellationToken);
-
-    [RelayCommand(CanExecute = nameof(CanChooseMapTools))]
-    private Task DisableMapTools(CancellationToken cancellationToken) => SetMapToolsChoiceAsync(false, cancellationToken);
-
-    private async Task SetMapToolsChoiceAsync(bool enabled, CancellationToken cancellationToken)
+    private async Task EnableMapTools(CancellationToken cancellationToken)
     {
         IsMapToolsBusy = true;
         try
         {
-            await _mapPreparation.SaveChoiceAsync(enabled, cancellationToken);
-            IsMapToolsPromptVisible = false;
-            if (enabled)
-                await PrepareMapsAsync(cancellationToken);
-            else
-                MapToolsStatus = "Инструменты карт отключены.";
+            await _mapPreparation.SaveChoiceAsync(true, cancellationToken);
+            await PrepareMapsAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -229,11 +219,13 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private async Task PrepareMapsAsync(CancellationToken cancellationToken)
     {
+        AreMapsReady = false;
         IsMapToolsBusy = true;
         try
         {
             var progress = new Progress<string>(status => MapToolsStatus = status);
             await Task.Run(() => _mapPreparation.PrepareAsync(progress, cancellationToken), cancellationToken);
+            AreMapsReady = true;
         }
         finally
         {
@@ -243,8 +235,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public PlayersInfoViewModel CreatePlayersInfo() => new(_logService, TogglePlayer, GetPlayer);
 
-    public MapViewModel CreateMapView() => new(MapName
-        ?? throw new InvalidOperationException("В логе не найдена запись о загрузке карты."), _mapViewService) { Timeline = this };
+    public MapViewModel CreateMapView() => new(MapName ?? string.Empty, _mapViewService) { Timeline = this };
 
     private void TogglePlayer(string cKey)
     {
