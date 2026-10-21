@@ -1,0 +1,109 @@
+name: Windows build
+
+on:
+  push:
+    branches: [build]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  publish:
+    name: Windows x64 / ${{ matrix.mode }}
+    runs-on: windows-2022
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mode: aot
+            output: native-aot
+            compression: 9
+          - mode: singlefile
+            output: singlefile
+            compression: 0
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish
+        shell: cmd
+        run: call build.bat ${{ matrix.mode }}
+
+      - name: Upload build
+        uses: actions/upload-artifact@v6
+        with:
+          name: Loggepector-win-x64-${{ matrix.mode }}-${{ github.run_number }}
+          path: artifacts/${{ matrix.output }}/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: ${{ matrix.compression }}
+
+      - name: Package release ZIP
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Compress-Archive -Path "artifacts/${{ matrix.output }}/*" -DestinationPath "release/Loggepector-win-x64-${{ matrix.mode }}.zip" -CompressionLevel Optimal
+
+      - name: Upload release ZIP
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-${{ matrix.mode }}
+          path: release/*.zip
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  release:
+    name: Publish GitHub Release
+    needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-2022
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      BUILD_RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: Download ZIP artifacts
+        shell: pwsh
+        run: |
+          gh run download "$env:BUILD_RUN_ID" --pattern "release-*" --dir release-files
+          if ($LASTEXITCODE -ne 0) { throw "Failed to download release archives." }
+
+      - name: Create release and attach ZIPs
+        shell: pwsh
+        run: |
+          $archives = @(Get-ChildItem -LiteralPath release-files -Recurse -File -Filter "*.zip" | Select-Object -ExpandProperty FullName)
+          if ($archives.Count -ne 2) { throw "Expected two release ZIP archives." }
+          gh release view "$env:RELEASE_TAG" --json url
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$env:RELEASE_TAG" @archives --clobber
+          } else {
+            gh release create "$env:RELEASE_TAG" @archives --verify-tag --generate-notes --title "$env:RELEASE_TAG"
+          }
+          if ($LASTEXITCODE -ne 0) { throw "Failed to publish GitHub Release." }
