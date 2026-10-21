@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using Avalonia;
 using Avalonia.VisualTree;
 using Avalonia.Controls;
@@ -13,10 +14,26 @@ namespace Loggepector.Views;
 
 public partial class MainWindow : Window
 {
+    private readonly CancellationTokenSource _mapPreparationCancellation = new();
+
     public MainWindow()
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, HandleSearchKeys, RoutingStrategies.Tunnel);
+        Opened += InitializeMapTools;
+        Closed += (_, _) =>
+        {
+            _mapPreparationCancellation.Cancel();
+            var viewModel = (MainWindowViewModel)DataContext!;
+            viewModel.EnableMapToolsCommand.Cancel();
+            viewModel.DisableMapToolsCommand.Cancel();
+        };
+    }
+
+    private async void InitializeMapTools(object? sender, EventArgs e)
+    {
+        Opened -= InitializeMapTools;
+        await ((MainWindowViewModel)DataContext!).InitializeMapToolsAsync(_mapPreparationCancellation.Token);
     }
 
     private void ToggleLogDetails(object? sender, RoutedEventArgs e)
@@ -81,6 +98,13 @@ public partial class MainWindow : Window
     {
         var viewModel = (MainWindowViewModel)DataContext!;
         viewModel.IsSearchVisible = false;
+    }
+
+    private void OpenMapView(object? sender, RoutedEventArgs e)
+    {
+        var viewModel = (MainWindowViewModel)DataContext!;
+        var window = new MapViewWindow { DataContext = viewModel.CreateMapView() };
+        window.Show(this);
     }
 
     private void OpenPlayersInfo(object? sender, RoutedEventArgs e)

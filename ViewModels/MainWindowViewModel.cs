@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using System.Threading;
 using Loggepector.Services;
 using Loggepector.Utils;
 
@@ -12,9 +14,29 @@ namespace Loggepector.ViewModels;
 public partial class MainWindowViewModel : ViewModelBase
 {
     private readonly ILogService _logService;
+    private readonly IMapPreparationService _mapPreparation;
+    private readonly IMapViewService _mapViewService;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanOpenMap))]
+    private string? _mapName;
+
+    [ObservableProperty]
+    private bool _isMapToolsPromptVisible;
+
+    [ObservableProperty]
+    private string _mapToolsStatus = string.Empty;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(EnableMapToolsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisableMapToolsCommand))]
+    private bool _isMapToolsBusy;
+
+    private bool CanChooseMapTools => !IsMapToolsBusy;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanOpenFile))]
+    [NotifyPropertyChangedFor(nameof(CanOpenMap))]
     [NotifyPropertyChangedFor(nameof(CanShowPlayersInfo))]
     [NotifyPropertyChangedFor(nameof(CanSelectTime))]
     private bool _isLoading;
@@ -88,18 +110,89 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool IsEmpty => Logs.Count == 0;
     public bool CanOpenFile => !IsLoading;
+    public bool CanOpenMap => !IsLoading && !string.IsNullOrWhiteSpace(MapName);
     public bool CanShowPlayersInfo => HasLogs && !IsLoading;
     public bool CanSelectTime => HasLogs && !IsLoading && MaximumSecond > 0;
     public double SliderMaximum => Math.Max(1, MaximumSecond);
     public string TimeLabel => $"От {TimeSpan.FromSeconds(FromSecond):c} до {TimeSpan.FromSeconds(ToSecond):c} · Всего {TimeSpan.FromSeconds(MaximumSecond):c}";
     public string CountLabel => $"Показано: {Logs.Count:N0} · Всего: {TotalCount:N0}";
 
-    public MainWindowViewModel(ILogService logService)
+    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService)
     {
         _logService = logService;
+        _mapPreparation = mapPreparation;
+        _mapViewService = mapViewService;
+    }
+
+    public async Task InitializeMapToolsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var choice = await _mapPreparation.GetChoiceAsync(cancellationToken);
+            IsMapToolsPromptVisible = choice is null;
+            if (choice == true)
+                await PrepareMapsAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            MapToolsStatus = "Подготовка карт остановлена.";
+        }
+        catch (Exception exception)
+        {
+            MapToolsStatus = $"Ошибка подготовки карт: {exception.Message}";
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanChooseMapTools))]
+    private Task EnableMapTools(CancellationToken cancellationToken) => SetMapToolsChoiceAsync(true, cancellationToken);
+
+    [RelayCommand(CanExecute = nameof(CanChooseMapTools))]
+    private Task DisableMapTools(CancellationToken cancellationToken) => SetMapToolsChoiceAsync(false, cancellationToken);
+
+    private async Task SetMapToolsChoiceAsync(bool enabled, CancellationToken cancellationToken)
+    {
+        IsMapToolsBusy = true;
+        try
+        {
+            await _mapPreparation.SaveChoiceAsync(enabled, cancellationToken);
+            IsMapToolsPromptVisible = false;
+            if (enabled)
+                await PrepareMapsAsync(cancellationToken);
+            else
+                MapToolsStatus = "Инструменты карт отключены.";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            MapToolsStatus = "Подготовка карт остановлена.";
+        }
+        catch (Exception exception)
+        {
+            MapToolsStatus = $"Ошибка подготовки карт: {exception.Message}";
+        }
+        finally
+        {
+            IsMapToolsBusy = false;
+        }
+    }
+
+    private async Task PrepareMapsAsync(CancellationToken cancellationToken)
+    {
+        IsMapToolsBusy = true;
+        try
+        {
+            var progress = new Progress<string>(status => MapToolsStatus = status);
+            await Task.Run(() => _mapPreparation.PrepareAsync(progress, cancellationToken), cancellationToken);
+        }
+        finally
+        {
+            IsMapToolsBusy = false;
+        }
     }
 
     public PlayersInfoViewModel CreatePlayersInfo() => new(_logService, TogglePlayer, GetPlayer);
+
+    public MapViewModel CreateMapView() => new(MapName
+        ?? throw new InvalidOperationException("В логе не найдена запись о загрузке карты."), _mapViewService);
 
     private void TogglePlayer(string cKey)
     {
@@ -139,6 +232,7 @@ public partial class MainWindowViewModel : ViewModelBase
             await _logService.LoadAsync(path, progress: progress);
             FileName = Path.GetFileName(path);
             TotalCount = _logService.Count;
+            MapName = _logService.MapName;
             HasLogs = TotalCount > 0;
             LogTypes = _logService.GetTypes().Select(type => new LogTypeViewModel(type, UpdateLogs)).ToArray();
             Players = _logService.GetCKeys().Select(key => new PlayerViewModel(key, OnPlayerSelectionChanged)).ToArray();

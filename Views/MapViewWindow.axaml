@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Loggepector.ViewModels"
+        xmlns:views="using:Loggepector.Views"
+        x:Class="Loggepector.Views.MapViewWindow"
+        x:DataType="vm:MapViewModel"
+        Title="{Binding MapName, StringFormat='MapView · {0}'}"
+        Width="1200" Height="850" MinWidth="700" MinHeight="450"
+        WindowStartupLocation="CenterOwner">
+    <Grid ClipToBounds="True">
+        <views:MapViewport x:Name="Viewport" Document="{Binding Document}"
+                           SelectedLayer="{Binding SelectedLayer}" Zoom="{Binding Zoom, Mode=TwoWay}"
+                           ToolTip.Tip="Перемещение — мышью, масштаб — колесом, вписать карту — двойной клик" />
+        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"
+                Background="#EFFFFFFF" CornerRadius="6" Padding="10">
+            <StackPanel Spacing="6">
+                <TextBlock Text="{Binding MapName}" Foreground="#202632" FontWeight="SemiBold" />
+                <Button Content="↑" Command="{Binding LayerUpCommand}" Width="34" Height="32"
+                        HorizontalContentAlignment="Center" ToolTip.Tip="На слой выше" />
+                <TextBlock Text="{Binding SelectedLayer, StringFormat='Z: {0}'}" Foreground="#5D687A" />
+                <Button Content="↓" Command="{Binding LayerDownCommand}" Width="34" Height="32"
+                        HorizontalContentAlignment="Center" ToolTip.Tip="На слой ниже" />
+            </StackPanel>
+        </Border>
+        <Border IsVisible="{Binding HasStatus}" HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Margin="16" Padding="12" CornerRadius="6" Background="#F5FFFFFF" MaxWidth="650">
+            <StackPanel Spacing="8">
+                <TextBlock Text="{Binding Status}" Foreground="#202632" TextWrapping="Wrap" />
+                <Button Content="Повторить загрузку" Click="ReloadMap" HorizontalAlignment="Center" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

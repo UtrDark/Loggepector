@@ -14,11 +14,15 @@ namespace Loggepector.Services;
 
 public sealed class LogService(IPlayerJoinService playerJoinService) : ILogService
 {
+    private static readonly Regex LoadingMap = new(
+        @"^\[[^\]\r\n]+\] DEBUG: ?Loading (?<map>[^\r\n]+?)\.{3}[ \t]*$", RegexOptions.Compiled);
     private Snapshot? _snapshot;
 
     public int Count => Volatile.Read(ref _snapshot)?.Count ?? 0;
 
     public TimeSpan Duration => Volatile.Read(ref _snapshot)?.Duration ?? TimeSpan.Zero;
+
+    public string? MapName => Volatile.Read(ref _snapshot)?.MapName;
 
     public async Task LoadAsync(string path, CancellationToken cancellationToken = default, IProgress<int>? progress = null)
     {
@@ -130,9 +134,12 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
                 @")(?![\p{L}\p{N}_-])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
         var sensitiveKeys = LogMessageSanitizer.CreateKeyPattern(entries);
         sorted = sorted.Select(entry => ((LogEntry)entry) with { SensitiveKeys = sensitiveKeys }).ToArray();
-        return new Snapshot(startTime, duration, entries.Count, sorted, players);
+        var mapName = sorted.Where(entry => entry.Type == "DEBUG")
+            .Select(entry => LoadingMap.Match(entry.GetRawMessage())).FirstOrDefault(match => match.Success)
+            ?.Groups["map"].Value;
+        return new Snapshot(startTime, duration, entries.Count, sorted, players, mapName);
     }
 
     private sealed record Snapshot(DateTime StartTime, TimeSpan Duration, int Count, ILogEntry[] Entries,
-        Dictionary<string, Regex> Players);
+        Dictionary<string, Regex> Players, string? MapName);
 }

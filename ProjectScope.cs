@@ -11,6 +11,8 @@ public static class ProjectScope
         var builder = new ContainerBuilder();
         builder.RegisterType<PlayerJoinService>().As<IPlayerJoinService>().SingleInstance();
         builder.RegisterType<LogService>().As<ILogService>().SingleInstance();
+        builder.RegisterType<MapPreparationService>().As<IMapPreparationService>().SingleInstance();
+        builder.RegisterType<MapViewService>().As<IMapViewService>().SingleInstance();
         builder.RegisterType<MainWindowViewModel>().SingleInstance();
         return builder.Build();
     }
