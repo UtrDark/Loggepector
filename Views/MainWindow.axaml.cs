@@ -30,6 +30,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         AddHandler(KeyDownEvent, HandleSearchKeys, RoutingStrategies.Tunnel);
+        Opened += InitializeFind;
         Opened += InitializeMapTools;
         Closed += (_, _) =>
         {
@@ -40,6 +41,19 @@ public partial class MainWindow : Window
             var viewModel = (MainWindowViewModel)DataContext!;
             viewModel.EnableMapToolsCommand.Cancel();
         };
+    }
+
+    private void InitializeFind(object? sender, EventArgs e)
+    {
+        Opened -= InitializeFind;
+        var model = (MainWindowViewModel)DataContext!;
+        void UpdateFindPosition(object? source, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(MainWindowViewModel.CurrentFindResult) && model.CurrentFindResult is { } log)
+                LogsList.ScrollIntoView(log);
+        }
+        model.PropertyChanged += UpdateFindPosition;
+        Closed += (_, _) => model.PropertyChanged -= UpdateFindPosition;
     }
 
     private async void InitializeMapTools(object? sender, EventArgs e)
@@ -107,11 +121,25 @@ public partial class MainWindow : Window
                 await CopySelectedLogsAsync();
                 break;
             case Key.F when e.KeyModifiers == KeyModifiers.Control:
-                OpenSearch(sender, e);
+                ((MainWindowViewModel)DataContext!).IsFindVisible = true;
+                Dispatcher.UIThread.Post(() =>
+                {
+                    FindBox.Focus();
+                    FindBox.SelectAll();
+                });
                 e.Handled = true;
                 break;
-            case Key.Escape when ((MainWindowViewModel)DataContext!).IsSearchVisible:
-                CloseSearch(sender, e);
+            case Key.Enter when FindBox.IsFocused:
+            case Key.F3 when ((MainWindowViewModel)DataContext!).IsFindVisible:
+                var model = (MainWindowViewModel)DataContext!;
+                var command = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? model.PreviousFindCommand : model.NextFindCommand;
+                if (command.CanExecute(null))
+                    command.Execute(null);
+                e.Handled = true;
+                break;
+            case Key.Escape when ((MainWindowViewModel)DataContext!).IsFindVisible:
+                ((MainWindowViewModel)DataContext!).IsFindVisible = false;
+                LogsList.Focus();
                 e.Handled = true;
                 break;
         }
@@ -192,7 +220,7 @@ public partial class MainWindow : Window
         {
             if (args.PropertyName == nameof(MainWindowViewModel.Logs))
                 await mapModel.UpdateLogsAsync(viewModel.Logs.Select(log => log.Entry).ToArray());
-            if (args.PropertyName == nameof(MainWindowViewModel.Relative))
+            if (args.PropertyName is nameof(MainWindowViewModel.Relative) or nameof(MainWindowViewModel.ShowArea))
                 mapModel.UpdateTimeDisplay();
         }
         viewModel.PropertyChanged += UpdateMapLogs;

@@ -18,11 +18,56 @@ public partial class MainWindowViewModel : ViewModelBase
     public ObservableCollection<LogEntryViewModel> SelectedLogs { get; } = new();
     private int _contextRevision;
 
+    public ObservableCollection<SearchBadgeViewModel> SearchBadges { get; } = new();
+
+    [ObservableProperty]
+    private bool _fuzzySearch;
+
+    partial void OnFuzzySearchChanged(bool value)
+    {
+        if (HasLogs && !IsLoading)
+            UpdateLogs();
+    }
+
+    [RelayCommand]
+    private void SearchBadge(BadgeSearchRequest request)
+    {
+        IsSearchVisible = true;
+        if (!request.Add)
+        {
+            SearchBadges.Clear();
+            SearchText = string.Empty;
+        }
+        if (!SearchBadges.Any(badge => badge.Part.Kind == request.Part.Kind &&
+            badge.Part.Text.Equals(request.Part.Text, StringComparison.OrdinalIgnoreCase)))
+            SearchBadges.Add(new SearchBadgeViewModel(request.Part));
+        if (HasLogs && !IsLoading)
+            UpdateLogs();
+    }
+
+    [RelayCommand]
+    private void RemoveSearchBadge(SearchBadgeViewModel badge)
+    {
+        SearchBadges.Remove(badge);
+        if (HasLogs && !IsLoading)
+            UpdateLogs();
+    }
+
     [ObservableProperty]
     private bool _sanitize = true;
 
     [ObservableProperty]
     private bool _showRaw;
+
+    [ObservableProperty]
+    private bool _showArea;
+
+    partial void OnShowAreaChanged(bool value)
+    {
+        foreach (var log in Logs.Concat(SelectedLogs).Distinct())
+            log.ShowArea = value;
+        RefreshFindMatches();
+    }
 
     [ObservableProperty]
     private bool _relative = true;
@@ -31,6 +76,7 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         foreach (var log in Logs.Concat(SelectedLogs).Distinct())
             log.Relative = value;
+        RefreshFindMatches();
     }
 
     [ObservableProperty]
@@ -450,7 +496,9 @@ public partial class MainWindowViewModel : ViewModelBase
         var revision = ++_contextRevision;
         var from = TimeSpan.FromSeconds(FromSecond);
         var to = TimeSpan.FromSeconds(ToSecond);
-        var types = LogTypes.Where(type => type.IsSelected).Select(type => type.Type).ToArray();
+        var types = LogTypes.Where(type => type.IsSelected == true).Select(type => type.Type).ToArray();
+        var excludedTypes = LogTypes.Where(type => type.IsSelected is null).Select(type => type.Type)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var players = Players.Where(player => player.IsSelected).Select(player => player.CKey).ToArray();
         var capture = CaptureSameType || CaptureByCoordinates;
         var sameType = CaptureSameType;
@@ -461,7 +509,9 @@ public partial class MainWindowViewModel : ViewModelBase
         ErrorMessage = null;
         try
         {
-            var filtered = _logService.GetLogs(from, to, types, players, SearchText);
+            IReadOnlyList<ILogEntry> filtered = _logService.GetLogs(from, to, types, players, SearchText,
+                    FuzzySearch, SearchBadges.Select(badge => badge.Part).ToArray())
+                .Where(entry => !excludedTypes.Contains(entry.Type)).ToArray();
             IReadOnlyList<ILogEntry> entries = filtered;
             if (capture)
             {
@@ -469,12 +519,19 @@ public partial class MainWindowViewModel : ViewModelBase
                 entries = await Task.Run(() => LogNeighbors.Find(candidates, filtered,
                     sameType, byCoordinates, count, radius));
             }
+            if (excludedTypes.Count > 0)
+                entries = entries.Where(entry => !excludedTypes.Contains(entry.Type)).ToArray();
             if (revision != _contextRevision)
                 return;
             var previous = Logs.ToDictionary(log => log.Entry.LineNumber);
             var selected = SelectedLogs.Select(log => log.Entry.LineNumber).ToHashSet();
-            Logs = entries.Select(entry => previous.TryGetValue(entry.LineNumber, out var log) && ReferenceEquals(log.Entry, entry)
-                ? log : new LogEntryViewModel(entry, RoundStartTime, Relative)).ToArray();
+            Logs = entries.Select((entry, index) =>
+            {
+                var row = previous.TryGetValue(entry.LineNumber, out var log) && ReferenceEquals(log.Entry, entry)
+                    ? log : new LogEntryViewModel(entry, RoundStartTime, Relative, ShowArea);
+                row.IsAlternate = index % 2 != 0;
+                return row;
+            }).ToArray();
             SelectedLogs.Clear();
             foreach (var log in Logs.Where(log => selected.Contains(log.Entry.LineNumber)))
                 SelectedLogs.Add(log);

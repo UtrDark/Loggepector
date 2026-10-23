@@ -15,6 +15,10 @@ public static class LogEntryParser
         @"^(?<speaker>.+? \(mob_\d+\)) \[(?<channel>[^\]\r\n]+)\](?<message>.*)$",
         RegexOptions.Compiled | RegexOptions.Singleline);
 
+    private static readonly Regex Announcement = new(
+        @"^.+?/\(.*?\)(?: \(mob_\d+\))? \((?:station announcement from\b|priority announcement\b)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     public static ILogEntry? Parse(string text, int lineNumber)
     {
         var match = Header.Match(text);
@@ -37,10 +41,17 @@ public static class LogEntryParser
             }
         }
 
+        if (type == "SAY" && Announcement.IsMatch(message))
+            type = "ANOUNCE";
+
         var entry = new LogEntry(timestamp, type, message, lineNumber, channel)
         {
             RawMessage = text
         };
+        if (type == "ATTACK")
+            return AttackLogEntry.TryCreate(entry) ?? entry;
+        if (type == "GAME" && ExplosionLogEntry.TryCreate(entry) is { } explosion)
+            return explosion;
         return type is "ADMINPRIVATE" or "ADMIN PRIVATE"
             ? new AdminPrivateLogEntry(entry)
             : PdaLogEntry.TryCreate(entry) ?? SayLogEntry.TryCreate(entry) ?? entry;

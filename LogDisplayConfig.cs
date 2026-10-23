@@ -2,11 +2,55 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Media;
+using Loggepector.Models;
 
 namespace Loggepector;
 
 public static class LogDisplayConfig
 {
+    public static IBrush FindTextBackground { get; } = Brush.Parse("#FFD54F");
+    public static IBrush FindTextForeground { get; } = Brush.Parse("#211900");
+    public static IBrush FindMarkerColor { get; } = Brush.Parse("#D6A500");
+    public static IBrush CurrentFindMarkerColor { get; } = Brush.Parse("#EF7D24");
+
+    public static IBrush AlternateRowOverlay { get; } = Brush.Parse("#28000000");
+    public static double LightBadgeTextScale { get; } = 0.5;
+
+    public static (IBrush Foreground, IBrush Background, IBrush Border) AdaptBadge(
+        (IBrush Foreground, IBrush Background, IBrush Border) style, bool dark)
+    {
+        if (dark)
+            return style;
+        var color = ((ISolidColorBrush)style.Foreground).Color;
+        var text = Color.FromRgb((byte)(color.R * LightBadgeTextScale), (byte)(color.G * LightBadgeTextScale),
+            (byte)(color.B * LightBadgeTextScale));
+        return (new SolidColorBrush(text), style.Background,
+            new SolidColorBrush(Color.FromArgb(128, text.R, text.G, text.B)));
+    }
+
+    public static IReadOnlyDictionary<LogMessagePartKind, (IBrush Foreground, IBrush Background, IBrush Border)> CombatHighlights { get; } =
+        new Dictionary<LogMessagePartKind, (IBrush, IBrush, IBrush)>
+        {
+            [LogMessagePartKind.Action] = CreateBadgeStyle("#CD6464"),
+            [LogMessagePartKind.Item] = CreateBadgeStyle("#D2AB62"),
+            [LogMessagePartKind.Help] = CreateBadgeStyle("#4C9A63"),
+            [LogMessagePartKind.Harm] = CreateBadgeStyle("#DD5353"),
+            [LogMessagePartKind.Brute] = CreateBadgeStyle("#DD5353"),
+            [LogMessagePartKind.Burn] = CreateBadgeStyle("#E99A45"),
+            [LogMessagePartKind.Tox] = CreateBadgeStyle("#6CA729"),
+            [LogMessagePartKind.Oxy] = CreateBadgeStyle("#57B8F0"),
+            [LogMessagePartKind.Health] = CreateBadgeStyle("#61B390"),
+            [LogMessagePartKind.DamageType] = CreateBadgeStyle("#CD6464"),
+            [LogMessagePartKind.Area] = CreateBadgeStyle("#829BAE")
+        };
+
+    private static (IBrush Foreground, IBrush Background, IBrush Border) CreateBadgeStyle(string value)
+    {
+        var color = Color.Parse(value);
+        return (new SolidColorBrush(color), new SolidColorBrush(Color.FromArgb(32, color.R, color.G, color.B)),
+            new SolidColorBrush(Color.FromArgb(128, color.R, color.G, color.B)));
+    }
+
     public static (IBrush Foreground, IBrush Background, IBrush Border) AIHighlight { get; } =
         (Brush.Parse("#E99A45"), Brush.Parse("#30E58A2B"), Brush.Parse("#A0E58A2B"));
 
@@ -43,6 +87,9 @@ public static class LogDisplayConfig
         new Dictionary<string, (IBrush, IBrush)>(StringComparer.Ordinal)
         {
             ["SAY"] = CreateStyle("#4C9A63"),
+            ["ANOUNCE"] = CreateStyle("#B68A36"),
+            ["EXPLOSION"] = CreateStyle("#E08036"),
+            ["AI"] = CreateStyle("#E99A45"),
             ["RADIO"] = CreateStyle("#468CC6"),
             ["MISC"] = CreateStyle("#9B78B5"),
             ["ACCESS"] = CreateStyle("#B68A36"),
