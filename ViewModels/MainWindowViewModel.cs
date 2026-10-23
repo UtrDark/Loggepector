@@ -22,6 +22,9 @@ public partial class MainWindowViewModel : ViewModelBase
     private bool _sanitize = true;
 
     [ObservableProperty]
+    private bool _showRaw;
+
+    [ObservableProperty]
     private bool _relative = true;
 
     partial void OnRelativeChanged(bool value)

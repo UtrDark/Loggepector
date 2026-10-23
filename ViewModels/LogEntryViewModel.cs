@@ -1,8 +1,10 @@
 using System;
 using System.Globalization;
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Media;
 using Loggepector.Models;
+using Loggepector.Utils;
 
 namespace Loggepector.ViewModels;
 
@@ -24,13 +26,24 @@ public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart, boo
 
     public string Message { get; } = entry.GetLogMessage();
 
+    public string RawMessage => Entry.GetRawMessage();
+
+    private IReadOnlyList<LogMessagePart>? _messageParts;
+    public IReadOnlyList<LogMessagePart> MessageParts => _messageParts ??= LogMessageHighlights.Create(Entry, Message);
+
     public bool IsMultiline => Message.Contains('\n') || Message.Contains('\r');
 
     public bool HasCoordinates => Entry.HasCoordinates;
 
     public bool HasChannel => Entry.Channel is not null;
 
-    public string ChannelLabel => Entry.Channel is { } channel ? $"[{LogDisplayConfig.GetChannel(channel).Text}]" : string.Empty;
+    public string ChannelLabel => Entry.Channel is { } channel ? LogDisplayConfig.GetChannel(channel).Text : string.Empty;
+
+    public IBrush ChannelBackground => Entry.Channel is { } channel
+        ? LogDisplayConfig.GetChannel(channel).Background : Brushes.Transparent;
+
+    public IBrush ChannelBorder => Entry.Channel is { } channel
+        ? LogDisplayConfig.GetChannel(channel).Border : Brushes.Transparent;
 
     public IBrush ChannelColor => Entry.Channel is { } channel
         ? LogDisplayConfig.GetChannel(channel).Color : Brushes.Transparent;
