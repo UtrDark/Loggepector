@@ -1,18 +1,31 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Loggepector.ViewModels"
+        xmlns:views="using:Loggepector.Views"
         xmlns:rs="using:RangeSlider.Avalonia.Controls"
         x:Class="Loggepector.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Width="1100" Height="720" MinWidth="650" MinHeight="400"
         Icon="/Assets/avalonia-logo.ico"
         Title="Loggepector">
+    <Window.Styles>
+        <Style Selector="FlyoutPresenter.rawLog">
+            <Setter Property="MaxWidth" Value="680" />
+            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        </Style>
+        <Style Selector="FlyoutPresenter.rawLog /template/ ScrollViewer">
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+        </Style>
+    </Window.Styles>
     <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,16">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,6">
             <Button Content="Открыть .log" Click="OpenLogFile" IsEnabled="{Binding CanOpenFile}" />
-            <TextBlock Grid.Column="1" Text="{Binding FileName}" Margin="16,0,0,0"
+            <Button Grid.Column="1" Content="{Binding LogisButtonText}" Click="ConnectLogis" IsEnabled="{Binding CanOpenFile}" Margin="8,0,0,0" />
+            <TextBlock Grid.Column="2" Text="{Binding FileName}" Margin="16,0,0,0"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <Button Grid.Column="2" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}" Margin="12,0,0,0" />
+            <Button Grid.Column="3" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}"
+                    Width="34" Height="32" Padding="0" FontSize="20" HorizontalContentAlignment="Center"
+                    ToolTip.Tip="Сменить тему" Margin="12,0,0,0" />
         </Grid>
 
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto" IsVisible="{Binding IsLoading}" Margin="0,0,0,12">
@@ -21,17 +34,18 @@
             <TextBlock Grid.Column="1" Text="{Binding LoadProgress, StringFormat='{}{0}%'}" Margin="12,0,0,0" />
         </Grid>
 
-        <TextBlock Grid.Row="2" Text="{Binding ErrorMessage}" Foreground="IndianRed"
+        <TextBlock Grid.Row="2" Text="{Binding ErrorMessage}" Foreground="IndianRed" IsVisible="{Binding HasErrorMessage}"
                    TextWrapping="Wrap" Margin="0,0,0,8" />
         <TextBlock Grid.Row="3" Text="{Binding TimeLabel}" />
         <rs:RangeSlider Grid.Row="4" Minimum="0" Maximum="{Binding SliderMaximum}"
                         LowerSelectedValue="{Binding FromSecond, Mode=TwoWay}"
                         UpperSelectedValue="{Binding ToSecond, Mode=TwoWay}"
                         TickFrequency="1" IsSnapToTickEnabled="True" IsThumbOverlap="True"
-                        IsEnabled="{Binding CanSelectTime}" Margin="0,8,0,16" />
+                        IsEnabled="{Binding CanSelectTime}" Margin="0,2,0,6" />
 
-        <StackPanel Grid.Row="5" Margin="0,0,0,12" Spacing="8">
-            <StackPanel Orientation="Horizontal" Spacing="8">
+        <StackPanel Grid.Row="5" Margin="0,0,0,6" Spacing="4">
+            <DockPanel LastChildFill="False" HorizontalAlignment="Left">
+            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="6">
                 <Button Content="Типы ▾" IsEnabled="{Binding CanOpenFile}">
                     <Button.Flyout>
                         <Flyout>
@@ -47,12 +61,12 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
-                <Button Content="Поиск · Ctrl+F" Click="OpenSearch" />
+                <Button Content="Search" Click="OpenSearch" />
                 <Button Content="PlayersInfo" Click="OpenPlayersInfo" IsEnabled="{Binding CanShowPlayersInfo}" />
                 <Button Content="MapView" Click="OpenMapView" IsEnabled="{Binding CanOpenMap}" />
             </StackPanel>
-            <Button IsEnabled="{Binding CanOpenFile}" HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Left">
+            <Button IsEnabled="{Binding CanOpenFile}" HorizontalAlignment="Left" MaxWidth="260"
+                    HorizontalContentAlignment="Left" Margin="8,0,0,0" Height="30" MinHeight="0" Padding="8,2">
                 <TextBlock Text="{Binding PlayerLabel}" TextTrimming="CharacterEllipsis" />
                 <Button.Flyout>
                     <Flyout>
@@ -72,34 +86,37 @@
                     </Flyout>
                 </Button.Flyout>
             </Button>
+            <CheckBox Content="Sanitize" IsChecked="{Binding Sanitize, Mode=TwoWay}" Margin="12,0,0,0" />
+            <CheckBox Content="Relative" IsChecked="{Binding Relative, Mode=TwoWay}" Margin="12,0,0,0" />
+            <CheckBox Content="Show raw" IsChecked="{Binding ShowRaw, Mode=TwoWay}" Margin="12,0,0,0" />
+            </DockPanel>
             <WrapPanel>
-                <CheckBox Content="Соседние того же типа" IsChecked="{Binding CaptureSameType, Mode=TwoWay}" Margin="0,0,8,0" />
+                <CheckBox Content="Соседние" IsChecked="{Binding CaptureSameType, Mode=TwoWay}" Margin="0,0,8,0" />
                 <NumericUpDown Value="{Binding NeighborCount, Mode=TwoWay}" Minimum="0" Maximum="100"
-                               Increment="1" FormatString="0" Width="140" Margin="0,0,12,0" />
-                <CheckBox Content="По координатам · радиус" IsChecked="{Binding CaptureByCoordinates, Mode=TwoWay}" Margin="0,0,8,0" />
+                               Increment="1" FormatString="0" Width="100" Margin="0,0,12,0" />
+                <CheckBox Content="Радиус" IsChecked="{Binding CaptureByCoordinates, Mode=TwoWay}" Margin="0,0,8,0" />
                 <NumericUpDown Value="{Binding CoordinateRadius, Mode=TwoWay}" Minimum="0" Maximum="255"
-                               Increment="1" FormatString="0" Width="140" Margin="0,0,12,0" />
+                               Increment="1" FormatString="0" Width="100" Margin="0,0,12,0" />
             </WrapPanel>
             <TextBlock Text="{Binding ContextStatus}" IsVisible="{Binding HasContextStatus}" Opacity="0.65" />
             <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsSearchVisible}">
-                <TextBox x:Name="SearchBox" Text="{Binding SearchText, Mode=TwoWay}"
-                         Watermark="Поиск по тексту в выбранном диапазоне" />
-                <Button Grid.Column="1" Content="Закрыть · Esc" Click="CloseSearch" Margin="8,0,0,0" />
+                <TextBox x:Name="SearchBox" Text="{Binding SearchText, Mode=TwoWay}" />
             </Grid>
         </StackPanel>
 
         <Grid Grid.Row="6">
             <ListBox x:Name="LogsList" ItemsSource="{Binding Logs}" SelectedItems="{Binding SelectedLogs, Mode=OneWay}" SelectionMode="Multiple" AutoScrollToSelectedItem="False"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                     ScrollViewer.VerticalScrollBarVisibility="Visible" ScrollViewer.AllowAutoHide="False" Padding="0,0,18,0">
+                     ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.AllowAutoHide="False" Padding="0">
                 <ListBox.Styles>
                     <Style Selector="ScrollViewer">
                         <Setter Property="BringIntoViewOnFocusChange" Value="False" />
                     </Style>
                     <Style Selector="ListBoxItem">
                         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <Setter Property="MinHeight" Value="44" />
+                        <Setter Property="MinHeight" Value="30" />
                         <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0" />
                         <Setter Property="VerticalContentAlignment" Value="Stretch" />
                     </Style>
                 </ListBox.Styles>
@@ -110,42 +127,51 @@
                 </ListBox.ItemsPanel>
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:LogEntryViewModel">
-                        <Grid RowDefinitions="44,Auto" Background="{Binding RowBackground}">
-                            <Grid ColumnDefinitions="110,120,Auto,*,Auto,Auto" Margin="8,0">
+                        <Grid RowDefinitions="30,Auto" Background="{Binding RowBackground}">
+                            <Grid ColumnDefinitions="110,120,*,Auto,Auto,Auto" Margin="8,0,2,0">
                                 <TextBlock Text="{Binding TimeLabel}"
                                            VerticalAlignment="Center" Opacity="0.65" />
                                 <TextBlock Grid.Column="1" Text="{Binding Entry.Type}" FontWeight="SemiBold"
                                            Foreground="{Binding TypeColor}"
                                            VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Grid.Column="2" Text="{Binding ChannelLabel}" Foreground="{Binding ChannelColor}"
-                                           IsVisible="{Binding HasChannel}" FontWeight="SemiBold"
-                                           VerticalAlignment="Center" Margin="0,0,8,0" />
-                                <TextBlock Grid.Column="3" Text="{Binding Message}" TextWrapping="NoWrap"
+                                <views:LogMessageTextBlock Grid.Column="2" Parts="{Binding MessageParts}" TextWrapping="NoWrap"
+                                           IsHitTestVisible="False" Focusable="False"
                                            VerticalAlignment="Center" MaxLines="1" TextTrimming="CharacterEllipsis" />
-                                <Button Grid.Column="4" Content="⌖" IsVisible="{Binding HasCoordinates}"
-                                        Click="ShowLogOnMap" Margin="8,0,0,0" Padding="6,2" VerticalAlignment="Center" />
-                                <Button Grid.Column="5" Name="ExpandDetailsButton" Content="{Binding ExpandLabel}"
+                                <Button Grid.Column="3" Content="⌖" IsVisible="{Binding HasCoordinates}"
+                                        Click="ShowLogOnMap" Margin="8,0,0,0" Padding="6,2" Height="24" MinHeight="0" VerticalAlignment="Center" />
+                                <Button Grid.Column="4" Name="ExpandDetailsButton" Content="{Binding ExpandLabel}"
                                               IsVisible="{Binding IsMultiline}"
                                               Click="ToggleLogDetails"
-                                              Margin="8,0,0,0" Padding="8,2" VerticalAlignment="Center"
+                                              Margin="8,0,0,0" Padding="8,2" Height="24" MinHeight="0" VerticalAlignment="Center"
                                               ToolTip.Tip="Развернуть или свернуть запись" />
+                                <Button Grid.Column="5" Content="RAW" Margin="8,0,0,0" Padding="6,2" Height="24"
+                                        IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ShowRaw}"
+                                        MinHeight="0" VerticalAlignment="Center" ToolTip.Tip="Исходная строка лога">
+                                    <Button.Flyout>
+                                        <Flyout FlyoutPresenterClasses="rawLog">
+                                            <ScrollViewer MaxWidth="640" MaxHeight="320" HorizontalScrollBarVisibility="Disabled">
+                                                <SelectableTextBlock Text="{Binding RawMessage}" TextWrapping="Wrap" />
+                                            </ScrollViewer>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
                             </Grid>
                             <Border Grid.Row="1" IsVisible="{Binding IsExpanded}" Padding="8"
                                     BorderThickness="0,1,0,0" BorderBrush="{DynamicResource AppBorderBrush}">
                                 <ScrollViewer MaxHeight="300" HorizontalScrollBarVisibility="Disabled">
-                                    <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
+                                    <views:LogMessageTextBlock Parts="{Binding MessageParts}" TextWrapping="Wrap" />
                                 </ScrollViewer>
                             </Border>
                         </Grid>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
-            <TextBlock Text="Нет записей по выбранным фильтрам" IsVisible="{Binding IsEmpty}"
+            <TextBlock Text="Нет записей" IsVisible="{Binding IsEmpty}"
                        HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"
                        Opacity="0.6" />
         </Grid>
 
-        <TextBlock Grid.Row="7" Text="{Binding CountLabel}" Margin="0,12,0,0" Opacity="0.65" />
+        <TextBlock Grid.Row="7" Text="{Binding CountLabel}" Margin="0,4,0,0" Opacity="0.65" />
 
     </Grid>
 </Window>

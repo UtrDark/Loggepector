@@ -7,10 +7,36 @@ namespace Loggepector;
 
 public static class LogDisplayConfig
 {
-    public static IReadOnlyDictionary<string, (string Text, IBrush Color)> Channels { get; } =
-        new Dictionary<string, (string, IBrush)>(StringComparer.Ordinal)
+    public static (IBrush Foreground, IBrush Background, IBrush Border) AIHighlight { get; } =
+        (Brush.Parse("#E99A45"), Brush.Parse("#30E58A2B"), Brush.Parse("#A0E58A2B"));
+
+    public static (IBrush Foreground, IBrush Background, IBrush Border) CKeyHighlight { get; } =
+        (Brush.Parse("#6AADE0"), Brush.Parse("#20468CC6"), Brush.Parse("#80468CC6"));
+
+    public static (IBrush Foreground, IBrush Background, IBrush Border) CharacterNameHighlight { get; } =
+        (Brush.Parse("#B393D0"), Brush.Parse("#209B78B5"), Brush.Parse("#809B78B5"));
+
+    public static IReadOnlyDictionary<string, (string Text, IBrush Color, IBrush Background, IBrush Border)> Channels { get; } =
+        new Dictionary<string, (string, IBrush, IBrush, IBrush)>(StringComparer.Ordinal)
         {
-            ["145.9"] = ("145.9", Brush.Parse("#4C9A63"))
+            ["121.1"] = CreateChannelStyle("Аплинк", "#8f4a4b"),
+            ["121.3"] = CreateChannelStyle("Синдикат", "#8f4a4b"),
+            ["121.5"] = CreateChannelStyle("Красные", "#ff0000"),
+            ["121.7"] = CreateChannelStyle("Синие", "#0000ff"),
+            ["121.9"] = CreateChannelStyle("Зеленые", "#00ff00"),
+            ["122.1"] = CreateChannelStyle("Желтые", "#d1ba22"),
+            ["133.7"] = CreateChannelStyle("ЦК", "#2681a5"),
+            ["134.7"] = CreateChannelStyle("Снабжение", "#b88646"),
+            ["134.9"] = CreateChannelStyle("Обслуживание", "#6ca729"),
+            ["135.1"] = CreateChannelStyle("Исследование", "#c68cfa"),
+            ["135.3"] = CreateChannelStyle("Командование", "#fcdf03"),
+            ["135.5"] = CreateChannelStyle("Медицина", "#57b8f0"),
+            ["135.7"] = CreateChannelStyle("Инженерия", "#f37746"),
+            ["135.9"] = CreateChannelStyle("Безопасность", "#dd3535"),
+            ["136.1"] = CreateChannelStyle("Юридический", "#df3e71"),
+            ["141.5"] = CreateChannelStyle("Развлечение", "#79c5a8"),
+            ["144.7"] = CreateChannelStyle("ИИ (личный)", "#d65d95"),
+            ["145.9"] = CreateChannelStyle("Общий", "#1ecc43")
         };
 
     public static IReadOnlyDictionary<string, (IBrush Foreground, IBrush Background)> Types { get; } =
@@ -29,8 +55,20 @@ public static class LogDisplayConfig
         new[] { "#4C9A63", "#468CC6", "#9B78B5", "#B68A36", "#CD6464", "#B85B9D", "#459C9C" }
             .Select(CreateStyle).ToArray();
 
-    public static (string Text, IBrush Color) GetChannel(string channel) =>
-        Channels.TryGetValue(channel, out var style) ? style : (channel, GetPaletteStyle(channel).Foreground);
+    public static (string Text, IBrush Color, IBrush Background, IBrush Border) GetChannel(string channel)
+    {
+        if (Channels.TryGetValue(channel, out var style))
+            return style;
+        var palette = GetPaletteStyle(channel);
+        return (channel, palette.Foreground, palette.Background, palette.Foreground);
+    }
+
+    private static (string Text, IBrush Color, IBrush Background, IBrush Border) CreateChannelStyle(string text, string value)
+    {
+        var color = Color.Parse(value);
+        return (text, new SolidColorBrush(color), new SolidColorBrush(Color.FromArgb(32, color.R, color.G, color.B)),
+            new SolidColorBrush(Color.FromArgb(128, color.R, color.G, color.B)));
+    }
 
     public static (IBrush Foreground, IBrush Background) GetType(string type) =>
         Types.TryGetValue(type, out var style) ? style : GetPaletteStyle(type);

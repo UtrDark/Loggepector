@@ -4,6 +4,7 @@ namespace Loggepector.Models;
 
 public sealed class MapCacheState
 {
+    public string SourceRepository { get; set; } = "ss220club/BandaStation";
     public int SourceSchemaVersion { get; set; }
     public string? SourceCommit { get; set; }
     public Dictionary<string, string> SourceFiles { get; set; } = new();
@@ -12,7 +13,7 @@ public sealed class MapCacheState
 
 public sealed record MapRenderState(string Fingerprint, string Directory, string[] Files);
 
-public sealed record MapToolsSettings(bool? Enabled);
+public sealed record MapToolsSettings(bool? Enabled, string RepositoryUrl = "https://github.com/ss220club/BandaStation");
 
 public sealed record MapChunk(string File, int Z, int Column, int Row, int Width, int Height,
     int MinX, int MaxX, int MinY, int MaxY);

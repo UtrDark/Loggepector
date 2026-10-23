@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 using Loggepector.ViewModels;
 
 namespace Loggepector.Views;
@@ -18,14 +19,23 @@ public partial class MapViewWindow : Window
         Closed += (_, _) =>
         {
             _lifetime.Cancel();
-            ((MapViewModel)DataContext!).EnableMapToolsCommand.Cancel();
+            var model = (MapViewModel)DataContext!;
+            model.EnableMapToolsCommand.Cancel();
+            model.RemoveMapToolsCommand.Cancel();
+            if (model.Timeline.IsMapToolsBusy)
+                model.Timeline.CancelMapToolsCommand.Execute(null);
         };
     }
+
+    private void RefreshMapToolsState(object? sender, RoutedEventArgs e) =>
+        ((MapViewModel)DataContext!).RefreshMapToolsState();
 
     private async void LoadMap(object? sender, EventArgs e)
     {
         Opened -= LoadMap;
-        await ((MapViewModel)DataContext!).LoadAsync(_lifetime.Token);
+        var model = (MapViewModel)DataContext!;
+        model.ReleaseMapResourcesAsync = Viewport.ClearAsync;
+        await model.LoadAsync(_lifetime.Token);
     }
 
 }
