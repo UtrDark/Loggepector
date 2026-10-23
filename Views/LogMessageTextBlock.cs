@@ -146,7 +146,8 @@ public sealed class LogMessageTextBlock : SelectableTextBlock
             badge.PointerPressed += (_, e) =>
             {
                 var request = new BadgeSearchRequest(part, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
-                if (e.GetCurrentPoint(badge).Properties.IsLeftButtonPressed && BadgeSearchCommand is { } command && command.CanExecute(request))
+                if ((e.KeyModifiers == KeyModifiers.Alt || e.KeyModifiers == (KeyModifiers.Alt | KeyModifiers.Shift)) &&
+                    e.GetCurrentPoint(badge).Properties.IsLeftButtonPressed && BadgeSearchCommand is { } command && command.CanExecute(request))
                 {
                     e.Handled = true;
                     command.Execute(request);

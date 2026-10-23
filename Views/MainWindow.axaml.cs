@@ -176,6 +176,7 @@ public partial class MainWindow : Window
             data.Add(item);
             await clipboard.SetDataAsync(data);
             await clipboard.FlushAsync();
+            _ = viewModel.ShowCopyNoticeAsync();
         }
         catch (Exception exception)
         {

@@ -16,6 +16,10 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
 {
     private static readonly Regex LoadingMap = new(
         @"^\[[^\]\r\n]+\] DEBUG: ?Loading (?<map>[^\r\n]+?)\.{3}[ \t]*$", RegexOptions.Compiled);
+    private static readonly Regex GarbageShutdown = new(
+        @"^\[[^\]\r\n]+\] DEBUG:\s*Shutting down Garbage subsystem\.\.\.[ \t]*$", RegexOptions.Compiled);
+    private static readonly Regex DebugObjectStart = new(
+        @"^\[[^\]\r\n]+\] DEBUG:\s*\{", RegexOptions.Compiled);
     private Snapshot? _snapshot;
 
     public int Count => Volatile.Read(ref _snapshot)?.Count ?? 0;
@@ -86,13 +90,15 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
         var entryStartLine = 0;
         var sourceLineNumber = 0;
         var fileLength = stream.Length;
+        var garbageReportPending = false;
+        var skipEntry = false;
         while (true)
         {
             var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (line is null || line.StartsWith('['))
             {
-                if (entryStartLine != 0 && LogEntryParser.Parse(text.ToString(), entryStartLine) is { } entry)
+                if (!skipEntry && entryStartLine != 0 && LogEntryParser.Parse(text.ToString(), entryStartLine) is { } entry)
                 {
                     if (entries.Count > 0 && MergeRadio.Merge(entries[^1], entry) is { } merged)
                         entries[^1] = merged;
@@ -105,10 +111,12 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
 
                 entryStartLine = sourceLineNumber + 1;
                 text.Clear();
+                skipEntry = garbageReportPending && DebugObjectStart.IsMatch(line);
+                garbageReportPending = GarbageShutdown.IsMatch(line);
             }
 
             sourceLineNumber++;
-            if (entryStartLine != 0)
+            if (entryStartLine != 0 && !skipEntry)
             {
                 if (text.Length > 0)
                     text.Append('\n');

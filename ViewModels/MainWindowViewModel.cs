@@ -17,6 +17,19 @@ public partial class MainWindowViewModel : ViewModelBase
 {
     public ObservableCollection<LogEntryViewModel> SelectedLogs { get; } = new();
     private int _contextRevision;
+    private int _copyNoticeRevision;
+
+    [ObservableProperty]
+    private bool _isCopyNoticeVisible;
+
+    public async Task ShowCopyNoticeAsync()
+    {
+        var revision = ++_copyNoticeRevision;
+        IsCopyNoticeVisible = true;
+        await Task.Delay(TimeSpan.FromSeconds(2));
+        if (revision == _copyNoticeRevision)
+            IsCopyNoticeVisible = false;
+    }
 
     public ObservableCollection<SearchBadgeViewModel> SearchBadges { get; } = new();
 
