@@ -29,10 +29,12 @@ public static class LogNeighbors
         }
         if (byCoordinates)
         {
-            var centers = matched.Select(entry => entry.GetCoordinates()).Where(point => point.HasValue)
-                .Select(point => point!.Value).Distinct().ToArray();
+            var centers = matched.Select(entry => (entry.Type, Point: entry.GetCoordinates()))
+                .Where(item => item.Point.HasValue)
+                .Select(item => (item.Type, item.Point!.Value.X, item.Point.Value.Y, item.Point.Value.Z))
+                .Distinct().ToArray();
             var cellSize = Math.Max(1, radius);
-            var cells = centers.GroupBy(point => (point.Z,
+            var cells = centers.GroupBy(point => (point.Type, point.Z,
                     X: (int)Math.Floor(point.X / cellSize), Y: (int)Math.Floor(point.Y / cellSize)))
                 .ToDictionary(group => group.Key, group => group.ToArray());
             var squaredRadius = radius * radius;
@@ -45,7 +47,7 @@ public static class LogNeighbors
                 var found = false;
                 for (var x = cellX - 1; x <= cellX + 1 && !found; x++)
                     for (var y = cellY - 1; y <= cellY + 1 && !found; y++)
-                        if (cells.TryGetValue((point.Z, x, y), out var nearby))
+                        if (cells.TryGetValue((entry.Type, point.Z, x, y), out var nearby))
                             found = nearby.Any(center =>
                                 Math.Pow((double)point.X - center.X, 2) + Math.Pow((double)point.Y - center.Y, 2) <= squaredRadius);
                 if (found)

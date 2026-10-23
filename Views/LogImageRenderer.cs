@@ -43,9 +43,12 @@ internal static class LogImageRenderer
             };
             var message = new LogMessageTextBlock
             {
+                DarkTheme = dark,
                 Parts = sanitize
                     ? LogMessageHighlights.Create(log.Entry, HiddenKey.Replace(
-                        LogMessageSanitizer.Clear(log.Entry.GetClearLogMessage(), keys), string.Empty))
+                        LogMessageSanitizer.Clear(log.Entry.GetClearLogMessage(), keys), string.Empty), log.ShowArea)
+                        .Select(part => part with { Text = HiddenKey.Replace(LogMessageSanitizer.Clear(part.Text, keys), string.Empty) })
+                        .Where(part => part.Text.Length > 0).ToArray()
                     : log.MessageParts,
                 Foreground = foreground,
                 TextWrapping = TextWrapping.Wrap
@@ -59,7 +62,14 @@ internal static class LogImageRenderer
             {
                 Background = log.RowBackground,
                 Padding = new Thickness(12, 10),
-                Child = row
+                Child = new Grid
+                {
+                    Children =
+                    {
+                        new Border { Background = rows.Children.Count % 2 != 0 ? LogDisplayConfig.AlternateRowOverlay : Brushes.Transparent },
+                        row
+                    }
+                }
             });
         }
         var image = new Border

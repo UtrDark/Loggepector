@@ -11,10 +11,21 @@ internal static class LogMessageHighlights
     private static readonly Regex Actor = new(@"(?<key>\*no key\*|[^\s/()]+)/\((?<name>[^)\r\n]+)\)", RegexOptions.Compiled);
     private static readonly Regex Join = new(@"MISC:\s*(?<key>[^\s\\]+)\s*\\\s*(?<name>[^\\\r\n]+)\s*\\", RegexOptions.Compiled);
     private static readonly Regex Recipient = new("""\(\s*PDA: .*? to (?<name>.*?)\) """, RegexOptions.Compiled);
+    private static readonly Regex Area = new(@"\((?<area>[^()]+?)\(\s*-?\d+\s*,\s*-?\d+\s*,\s*-?\d+\s*\)\s*\)", RegexOptions.Compiled);
+    private static readonly Regex Mob = new(@"\s*\(mob_\d+\)", RegexOptions.Compiled);
+    private static readonly Regex NoKey = new(@"(?:\(\s*\*no key\*\s*\)|\*no key\*)[ \t]*", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex ActingAs = new(@"(?:(?<![\w:])(?<key>[A-Za-z0-9_@-]+)\s+)?\(as (?<name>.*?) at -?\d+\s*,\s*-?\d+\s*,\s*-?\d+\)", RegexOptions.Compiled);
 
-    public static IReadOnlyList<LogMessagePart> Create(ILogEntry entry, string message)
+    public static IReadOnlyList<LogMessagePart> Create(ILogEntry entry, string message, bool showArea = false)
     {
+        var locations = Area.Matches(message).Cast<Match>().ToArray();
+        var inlineAreas = entry is ExplosionLogEntry || locations.Length > 1 || message.Contains("has teleported from", StringComparison.OrdinalIgnoreCase);
+        static string AreaName(Match match) => match.Groups["area"].Value.Replace("\r", string.Empty).Replace("\n", string.Empty).Trim();
+        message = Mob.Replace(Area.Replace(message, match => inlineAreas ? AreaName(match) : string.Empty), string.Empty).TrimEnd();
         var identities = new Dictionary<string, LogMessagePartKind>(StringComparer.OrdinalIgnoreCase);
+        if (showArea && inlineAreas)
+            foreach (var location in locations)
+                identities[AreaName(location)] = LogMessagePartKind.Area;
         var parts = new List<LogMessagePart>();
         if (entry is ForcedSayLogEntry && message.StartsWith("[FAI]/", StringComparison.Ordinal))
         {
@@ -34,13 +45,28 @@ internal static class LogMessageHighlights
             if (key.Length > 0 && key != "*no key*")
                 identities[key] = LogMessagePartKind.CKey;
         }
+        message = NoKey.Replace(message, string.Empty).TrimStart();
         var recipient = Recipient.Match(entry.GetRawMessage());
+        foreach (Match actor in ActingAs.Matches(entry.GetRawMessage()))
+        {
+            if (actor.Groups["name"].Value.Length > 0)
+                identities[actor.Groups["name"].Value] = LogMessagePartKind.CharacterName;
+            if (actor.Groups["key"].Success)
+                identities[actor.Groups["key"].Value] = LogMessagePartKind.CKey;
+        }
         if (recipient.Success && recipient.Groups["name"].Value.Length > 0)
             identities[recipient.Groups["name"].Value] = LogMessagePartKind.CharacterName;
+        if (entry is AttackLogEntry attack)
+            foreach (var highlight in attack.Highlights)
+                if (highlight.Key.Length > 0 && (highlight.Value != LogMessagePartKind.Area || showArea))
+                    identities[highlight.Key] = highlight.Value;
+        if (entry is ExplosionLogEntry explosion)
+            foreach (var highlight in explosion.Highlights)
+                identities[highlight.Key] = highlight.Value;
         if (identities.Count == 0)
         {
             parts.Add(new LogMessagePart(message, LogMessagePartKind.Text));
-            return AddChannel(parts, entry.Channel);
+            return Finish(parts, entry, showArea && !inlineAreas);
         }
         var pattern = @"(?<![\p{L}\p{N}_])(?:" + string.Join("|", identities.Keys.OrderByDescending(value => value.Length).Select(Regex.Escape)) + @")(?![\p{L}\p{N}_])";
         var position = 0;
@@ -53,7 +79,21 @@ internal static class LogMessageHighlights
         }
         if (position < message.Length)
             parts.Add(new LogMessagePart(message[position..], LogMessagePartKind.Text));
-        return AddChannel(parts, entry.Channel);
+        return Finish(parts, entry, showArea && !inlineAreas);
+    }
+
+    private static IReadOnlyList<LogMessagePart> Finish(List<LogMessagePart> parts, ILogEntry entry, bool showArea)
+    {
+        AddChannel(parts, entry.Channel);
+        if (showArea)
+        {
+            foreach (Match area in Area.Matches(entry.GetRawMessage()))
+            {
+                parts.Add(new LogMessagePart(" ", LogMessagePartKind.Text));
+                parts.Add(new LogMessagePart(area.Groups["area"].Value.Trim(), LogMessagePartKind.Area));
+            }
+        }
+        return parts;
     }
 
     private static IReadOnlyList<LogMessagePart> AddChannel(List<LogMessagePart> parts, string? channel)

@@ -60,7 +60,7 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
         GetLogs(from, to, types, Array.Empty<string>());
 
     public IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, IReadOnlyList<string> types,
-        IReadOnlyList<string> ckeys, string searchText = "")
+        IReadOnlyList<string> ckeys, string searchText = "", bool fuzzy = false, IReadOnlyList<LogMessagePart>? badges = null)
     {
         var snapshot = Volatile.Read(ref _snapshot)!;
         ILogFilter[] filters =
@@ -68,7 +68,7 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
             new TimeLogFilter(snapshot.StartTime, from, to),
             new TypeLogFilter(types),
             new PlayerLogFilter(ckeys, snapshot.Players),
-            new TextLogFilter(searchText)
+            new TextLogFilter(searchText, fuzzy, badges)
         ];
         IEnumerable<ILogEntry> entries = snapshot.Entries;
         foreach (var filter in filters)
@@ -119,7 +119,9 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
             progress?.Report((int)Math.Floor(stream.Position * 90.0 / fileLength));
         }
 
-        var sorted = entries.OrderBy(entry => entry.Timestamp).ThenBy(entry => entry.LineNumber)
+        var sorted = entries.Select(entry => entry is ForcedSayLogEntry || entry.GetRawMessage().Contains("[FAI]", StringComparison.Ordinal)
+                ? ((LogEntry)entry) with { Type = "AI" } : entry)
+            .OrderBy(entry => entry.Timestamp).ThenBy(entry => entry.LineNumber)
             .ToArray();
         var startTime = sorted.Length == 0 ? default : sorted[0].Timestamp;
         var duration = sorted.Length == 0 ? TimeSpan.Zero : sorted[^1].Timestamp - startTime;
