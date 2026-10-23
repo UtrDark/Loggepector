@@ -19,6 +19,21 @@ public partial class MainWindowViewModel : ViewModelBase
     private int _contextRevision;
 
     [ObservableProperty]
+    private bool _sanitize = true;
+
+    [ObservableProperty]
+    private bool _showRaw;
+
+    [ObservableProperty]
+    private bool _relative = true;
+
+    partial void OnRelativeChanged(bool value)
+    {
+        foreach (var log in Logs.Concat(SelectedLogs).Distinct())
+            log.Relative = value;
+    }
+
+    [ObservableProperty]
     private bool _captureSameType;
 
     [ObservableProperty]
@@ -45,7 +60,7 @@ public partial class MainWindowViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(ThemeButtonText))]
     private bool _isDarkTheme;
 
-    public string ThemeButtonText => IsDarkTheme ? "Светлая тема" : "Тёмная тема";
+    public string ThemeButtonText => IsDarkTheme ? "☀" : "☾";
 
     [RelayCommand]
     private void ToggleTheme()
@@ -64,21 +79,34 @@ public partial class MainWindowViewModel : ViewModelBase
     private readonly ILogService _logService;
     private readonly IMapPreparationService _mapPreparation;
     private readonly IMapViewService _mapViewService;
+    private CancellationTokenSource? _mapToolsCancellation;
+    private Task _mapPreparationTask = Task.CompletedTask;
+    private bool _mapToolsDeleted;
+
+    [ObservableProperty]
+    private string _mapRepositoryUrl = new MapToolsSettings(null).RepositoryUrl;
+
+    partial void OnMapRepositoryUrlChanged(string value) => AreMapsReady = false;
+    public Func<MapDownloadStage, CancellationToken, Task<bool>>? ConfirmMapDownloadAsync { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CanOpenMap))]
     private string? _mapName;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMapToolsStatus))]
     private string _mapToolsStatus = string.Empty;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(EnableMapToolsCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CancelMapToolsCommand))]
     private bool _isMapToolsBusy;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(EnableMapToolsCommand))]
     private bool _areMapsReady;
+
+    public bool HasMapToolsStatus => !string.IsNullOrWhiteSpace(MapToolsStatus);
 
     private bool CanChooseMapTools => !IsMapToolsBusy && !AreMapsReady;
 
@@ -98,10 +126,13 @@ public partial class MainWindowViewModel : ViewModelBase
     private int _loadProgress;
 
     [ObservableProperty]
-    private string _fileName = "Файл не выбран";
+    private string _fileName = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasErrorMessage))]
     private string? _errorMessage;
+
+    public bool HasErrorMessage => !string.IsNullOrWhiteSpace(ErrorMessage);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TimeLabel))]
@@ -180,8 +211,9 @@ public partial class MainWindowViewModel : ViewModelBase
     {
         try
         {
+            MapRepositoryUrl = await _mapPreparation.GetRepositoryAsync(cancellationToken);
             var choice = await _mapPreparation.GetChoiceAsync(cancellationToken);
-            if (choice == true)
+            if (choice == true && !_mapToolsDeleted)
                 await PrepareMapsAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -197,10 +229,11 @@ public partial class MainWindowViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanChooseMapTools))]
     private async Task EnableMapTools(CancellationToken cancellationToken)
     {
+        _mapToolsDeleted = false;
         IsMapToolsBusy = true;
         try
         {
-            await _mapPreparation.SaveChoiceAsync(true, cancellationToken);
+            await _mapPreparation.SaveChoiceAsync(true, MapRepositoryUrl, cancellationToken);
             await PrepareMapsAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -217,15 +250,30 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    private async Task PrepareMapsAsync(CancellationToken cancellationToken)
+    [RelayCommand(CanExecute = nameof(IsMapToolsBusy))]
+    private void CancelMapTools()
     {
-        AreMapsReady = false;
+        _mapToolsCancellation?.Cancel();
+        EnableMapToolsCommand.Cancel();
+    }
+
+    private Task PrepareMapsAsync(CancellationToken cancellationToken) =>
+        _mapPreparationTask = RunPrepareMapsAsync(cancellationToken);
+
+    public async Task RemoveMapToolsAsync(CancellationToken cancellationToken)
+    {
+        _mapToolsDeleted = true;
+        CancelMapTools();
+        if (EnableMapToolsCommand.ExecutionTask is { } enabling)
+            await enabling;
+        await _mapPreparationTask;
         IsMapToolsBusy = true;
+        AreMapsReady = false;
         try
         {
-            var progress = new Progress<string>(status => MapToolsStatus = status);
-            await Task.Run(() => _mapPreparation.PrepareAsync(progress, cancellationToken), cancellationToken);
-            AreMapsReady = true;
+            await _mapPreparation.DeleteAllAsync(cancellationToken);
+            MapRepositoryUrl = new MapToolsSettings(null).RepositoryUrl;
+            MapToolsStatus = "Все данные карт удалены.";
         }
         finally
         {
@@ -233,9 +281,59 @@ public partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private async Task RunPrepareMapsAsync(CancellationToken cancellationToken)
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _mapToolsCancellation = cancellation;
+        AreMapsReady = false;
+        IsMapToolsBusy = true;
+        try
+        {
+            var progress = new Progress<string>(status => MapToolsStatus = status);
+            async Task ConfirmDownload(MapDownloadStage stage, CancellationToken token)
+            {
+                var confirm = ConfirmMapDownloadAsync
+                    ?? throw new InvalidOperationException("Не подключено окно подтверждения скачивания карт.");
+                if (!await confirm(stage, token))
+                    cancellation.Cancel();
+                token.ThrowIfCancellationRequested();
+            }
+            await Task.Run(() => _mapPreparation.PrepareAsync(progress, ConfirmDownload, cancellation.Token), cancellation.Token);
+            AreMapsReady = true;
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
+        {
+            MapToolsStatus = "Подготовка карт отменена.";
+        }
+        catch (Exception exception)
+        {
+            MapToolsStatus = $"Ошибка подготовки карт: {exception.Message}";
+        }
+        finally
+        {
+            _mapToolsCancellation = null;
+            IsMapToolsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void ResetTimeSlice()
+    {
+        FromSecond = 0;
+        ToSecond = MaximumSecond;
+    }
+
+    public void FocusLogTime(ILogEntry entry, double radius)
+    {
+        var second = (entry.Timestamp - RoundStartTime).TotalSeconds;
+        FromSecond = 0;
+        ToSecond = Math.Clamp(second + radius, 0, MaximumSecond);
+        FromSecond = Math.Clamp(second - radius, 0, ToSecond);
+    }
+
     public PlayersInfoViewModel CreatePlayersInfo() => new(_logService, TogglePlayer, GetPlayer);
 
-    public MapViewModel CreateMapView() => new(MapName ?? string.Empty, _mapViewService) { Timeline = this };
+    public MapViewModel CreateMapView() => new(MapName ?? string.Empty, _mapViewService, _mapPreparation) { Timeline = this };
 
     private void TogglePlayer(string cKey)
     {
@@ -376,7 +474,7 @@ public partial class MainWindowViewModel : ViewModelBase
             var previous = Logs.ToDictionary(log => log.Entry.LineNumber);
             var selected = SelectedLogs.Select(log => log.Entry.LineNumber).ToHashSet();
             Logs = entries.Select(entry => previous.TryGetValue(entry.LineNumber, out var log) && ReferenceEquals(log.Entry, entry)
-                ? log : new LogEntryViewModel(entry, RoundStartTime)).ToArray();
+                ? log : new LogEntryViewModel(entry, RoundStartTime, Relative)).ToArray();
             SelectedLogs.Clear();
             foreach (var log in Logs.Where(log => selected.Contains(log.Entry.LineNumber)))
                 SelectedLogs.Add(log);

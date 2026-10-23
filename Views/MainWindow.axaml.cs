@@ -45,7 +45,24 @@ public partial class MainWindow : Window
     private async void InitializeMapTools(object? sender, EventArgs e)
     {
         Opened -= InitializeMapTools;
-        await ((MainWindowViewModel)DataContext!).InitializeMapToolsAsync(_mapPreparationCancellation.Token);
+        var model = (MainWindowViewModel)DataContext!;
+        model.ConfirmMapDownloadAsync = ConfirmMapDownloadAsync;
+        await model.InitializeMapToolsAsync(_mapPreparationCancellation.Token);
+    }
+
+    private async Task<bool> ConfirmMapDownloadAsync(MapDownloadStage stage, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var confirmation = await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var window = new MapDownloadWindow { DataContext = new MapDownloadViewModel(stage) };
+            var owner = _mapWindow is { IsVisible: true } mapWindow ? (Window)mapWindow : this;
+            var result = window.ShowDialog<bool>(owner);
+            var cancellation = cancellationToken.Register(() => Dispatcher.UIThread.Post(() => window.Close(false)));
+            window.Closed += (_, _) => cancellation.Dispose();
+            return result;
+        });
+        return confirmation;
     }
 
     private void ToggleLogDetails(object? sender, RoutedEventArgs e)
@@ -121,7 +138,7 @@ public partial class MainWindow : Window
             var clipboard = Clipboard ?? throw new InvalidOperationException("Буфер обмена недоступен.");
             var selected = LogsList.SelectedItems!.Cast<LogEntryViewModel>()
                 .OrderBy(log => log.Entry.Timestamp).ThenBy(log => log.Entry.LineNumber).ToArray();
-            using var bitmap = LogImageRenderer.Render(selected, ActualThemeVariant == ThemeVariant.Dark);
+            using var bitmap = LogImageRenderer.Render(selected, ActualThemeVariant == ThemeVariant.Dark, viewModel.Sanitize);
             using var stream = new MemoryStream();
             bitmap.Save(stream);
             var item = new DataTransferItem();
@@ -144,7 +161,10 @@ public partial class MainWindow : Window
 
     private void OpenSearch(object? sender, RoutedEventArgs e)
     {
-        ((MainWindowViewModel)DataContext!).IsSearchVisible = true;
+        var viewModel = (MainWindowViewModel)DataContext!;
+        viewModel.IsSearchVisible = !viewModel.IsSearchVisible;
+        if (!viewModel.IsSearchVisible)
+            return;
         Dispatcher.UIThread.Post(() =>
         {
             SearchBox.Focus();
@@ -163,7 +183,7 @@ public partial class MainWindow : Window
     private MapViewWindow GetMapWindow()
     {
         var viewModel = (MainWindowViewModel)DataContext!;
-        if (_mapWindow is { DataContext: MapViewModel map } existing && map.MapName == (viewModel.MapName ?? string.Empty))
+        if (_mapWindow is { } existing)
             return existing;
         _mapWindow?.Close();
         var mapModel = viewModel.CreateMapView();
@@ -172,6 +192,8 @@ public partial class MainWindow : Window
         {
             if (args.PropertyName == nameof(MainWindowViewModel.Logs))
                 await mapModel.UpdateLogsAsync(viewModel.Logs.Select(log => log.Entry).ToArray());
+            if (args.PropertyName == nameof(MainWindowViewModel.Relative))
+                mapModel.UpdateTimeDisplay();
         }
         viewModel.PropertyChanged += UpdateMapLogs;
         _ = mapModel.UpdateLogsAsync(viewModel.Logs.Select(log => log.Entry).ToArray());
@@ -189,16 +211,20 @@ public partial class MainWindow : Window
     private void ShowLogOnMap(object? sender, RoutedEventArgs e)
     {
         var viewModel = (MainWindowViewModel)DataContext!;
-        if (!viewModel.CanOpenMap || string.IsNullOrWhiteSpace(viewModel.MapName))
+        var entry = (LogEntryViewModel)((Button)sender!).DataContext!;
+        var mapName = AdditionalMaps.IsPlanetaryPort(entry.Entry) ? AdditionalMaps.PlanetaryPortName :
+            AdditionalMaps.IsLavaland(entry.Entry) ? AdditionalMaps.LavalandName : viewModel.MapName;
+        if (!viewModel.CanOpenMap || string.IsNullOrWhiteSpace(mapName))
         {
             viewModel.ErrorMessage = "В логе не найдена карта станции или ещё идёт загрузка.";
             return;
         }
-        var entry = (LogEntryViewModel)((Button)sender!).DataContext!;
         var coordinates = entry.Entry.GetCoordinates()
             ?? throw new InvalidOperationException("У записи отсутствуют координаты.");
         var window = GetMapWindow();
-        ((MapViewModel)window.DataContext!).FocusLocation = new MapLocation(coordinates.X, coordinates.Y, coordinates.Z);
+        var mapModel = (MapViewModel)window.DataContext!;
+        mapModel.MapName = mapName;
+        mapModel.FocusLocation = new MapLocation(coordinates.X, coordinates.Y, coordinates.Z);
         window.Activate();
         e.Handled = true;
     }

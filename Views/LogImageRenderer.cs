@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Documents;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Layout;
 using Loggepector.ViewModels;
 using Loggepector.Utils;
 
@@ -15,16 +16,16 @@ namespace Loggepector.Views;
 internal static class LogImageRenderer
 {
     private static readonly Regex HiddenKey = new(@"\(\s*\[CKEY\]\s*\)|\[CKEY\]", RegexOptions.Compiled);
-    internal static RenderTargetBitmap Render(IReadOnlyList<LogEntryViewModel> logs, bool dark)
+    internal static RenderTargetBitmap Render(IReadOnlyList<LogEntryViewModel> logs, bool dark, bool sanitize)
     {
         const int width = 1200;
         var foreground = Brush.Parse(dark ? "#E4E9F1" : "#202632");
         var background = Brush.Parse(dark ? "#101318" : "#FFFFFF");
         var rows = new StackPanel { Spacing = 2 };
-        var keys = LogMessageSanitizer.CreateKeyPattern(logs.Select(log => log.Entry));
+        var keys = sanitize ? LogMessageSanitizer.CreateKeyPattern(logs.Select(log => log.Entry)) : null;
         foreach (var log in logs)
         {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("90,130,Auto,*") };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("90,130,*") };
             var time = new TextBlock
             {
                 Text = log.TimeLabel[..^4],
@@ -40,28 +41,19 @@ internal static class LogImageRenderer
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 12, 0)
             };
-            var message = new TextBlock
+            var message = new LogMessageTextBlock
             {
-                Text = HiddenKey.Replace(log.Entry.GetClearLogMessage(), string.Empty),
+                Parts = sanitize
+                    ? LogMessageHighlights.Create(log.Entry, HiddenKey.Replace(
+                        LogMessageSanitizer.Clear(log.Entry.GetClearLogMessage(), keys), string.Empty))
+                    : log.MessageParts,
                 Foreground = foreground,
                 TextWrapping = TextWrapping.Wrap
             };
             Grid.SetColumn(type, 1);
-            Grid.SetColumn(message, 3);
+            Grid.SetColumn(message, 2);
             row.Children.Add(time);
             row.Children.Add(type);
-            if (log.HasChannel)
-            {
-                var channel = new TextBlock
-                {
-                    Text = HiddenKey.Replace(LogMessageSanitizer.Clear(log.ChannelLabel, keys), string.Empty),
-                    Foreground = log.ChannelColor,
-                    FontWeight = FontWeight.SemiBold,
-                    Margin = new Thickness(0, 0, 10, 0)
-                };
-                Grid.SetColumn(channel, 2);
-                row.Children.Add(channel);
-            }
             row.Children.Add(message);
             rows.Children.Add(new Border
             {
