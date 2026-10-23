@@ -39,6 +39,22 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool HasContextStatus => !string.IsNullOrEmpty(ContextStatus);
 
+    private readonly ILogisService _logisService;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LogisButtonText))]
+    private bool _hasLogisSession;
+
+    public string LogisButtonText => HasLogisSession ? "Открыть из Logis" : "Подключить Logis";
+    public LogisViewModel CreateLogisConnection() => new(_logisService);
+    public LogisBrowserViewModel CreateLogisBrowser(bool allowAutomaticLogin) => new(_logisService, allowAutomaticLogin);
+    public void RestoreLogisSession()
+    {
+        _logisService.RestoreSession();
+        RefreshLogisSession();
+    }
+    public void RefreshLogisSession() => HasLogisSession = _logisService.SessionId is not null;
+
     private readonly IThemeService _themeService;
 
     [ObservableProperty]
@@ -167,8 +183,9 @@ public partial class MainWindowViewModel : ViewModelBase
     public string TimeLabel => $"От {TimeSpan.FromSeconds(FromSecond):c} до {TimeSpan.FromSeconds(ToSecond):c} · Всего {TimeSpan.FromSeconds(MaximumSecond):c}";
     public string CountLabel => $"Показано: {Logs.Count:N0} · Всего: {TotalCount:N0}";
 
-    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService, IThemeService themeService)
+    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService, IThemeService themeService, ILogisService logisService)
     {
+        _logisService = logisService;
         _themeService = themeService;
         IsDarkTheme = themeService.IsDark;
         _logService = logService;

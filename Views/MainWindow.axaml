@@ -8,11 +8,12 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="Loggepector">
     <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,16">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,16">
             <Button Content="Открыть .log" Click="OpenLogFile" IsEnabled="{Binding CanOpenFile}" />
-            <TextBlock Grid.Column="1" Text="{Binding FileName}" Margin="16,0,0,0"
+            <Button Grid.Column="1" Content="{Binding LogisButtonText}" Click="ConnectLogis" IsEnabled="{Binding CanOpenFile}" Margin="8,0,0,0" />
+            <TextBlock Grid.Column="2" Text="{Binding FileName}" Margin="16,0,0,0"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <Button Grid.Column="2" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}" Margin="12,0,0,0" />
+            <Button Grid.Column="3" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}" Margin="12,0,0,0" />
         </Grid>
 
         <Grid Grid.Row="1" ColumnDefinitions="*,Auto" IsVisible="{Binding IsLoading}" Margin="0,0,0,12">
