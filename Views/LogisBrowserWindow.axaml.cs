@@ -15,6 +15,8 @@ public partial class LogisBrowserWindow : Window
             var model = (LogisBrowserViewModel)DataContext!;
             model.PropertyChanged += ModelChanged;
             await model.InitializeAsync();
+            if (model.SelectedLog is { } selected)
+                RoundsList.ScrollIntoView(selected);
         };
         Closed += (_, _) =>
         {

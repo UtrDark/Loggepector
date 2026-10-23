@@ -15,7 +15,8 @@ namespace Loggepector.ViewModels;
 public partial class LogisBrowserViewModel : ViewModelBase
 {
     private readonly ILogisService _service;
-    private readonly bool _allowAutomaticLogin;
+    private bool _allowAutomaticLogin;
+    private bool _restoringSelection;
     private CancellationTokenSource? _selectionCancellation;
 
     [ObservableProperty] private IReadOnlyList<string> _servers = Array.Empty<string>();
@@ -27,7 +28,9 @@ public partial class LogisBrowserViewModel : ViewModelBase
     [ObservableProperty] private IReadOnlyList<LogisLogFile> _logs = Array.Empty<LogisLogFile>();
     [ObservableProperty] private string? _selectedServer;
     [ObservableProperty] private string? _selectedDate;
-    [ObservableProperty] private DateTime? _selectedCalendarDate;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CalendarDisplayDate))]
+    private DateTime? _selectedCalendarDate;
     [ObservableProperty] private string _roundSearchText = string.Empty;
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(DownloadCommand))]
@@ -41,7 +44,10 @@ public partial class LogisBrowserViewModel : ViewModelBase
     [NotifyPropertyChangedFor(nameof(HasProgress))]
     [NotifyCanExecuteChangedFor(nameof(DownloadCommand))]
     private bool _isDownloading;
-    [ObservableProperty] private string _status = "Выберите сервер.";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStatus))]
+    private string _status = "Выберите сервер.";
+    public bool HasStatus => !string.IsNullOrWhiteSpace(Status);
     [ObservableProperty] private string? _errorMessage;
     [ObservableProperty] private int _downloadProgress;
     [ObservableProperty] private string? _downloadedPath;
@@ -54,7 +60,7 @@ public partial class LogisBrowserViewModel : ViewModelBase
 
     public DateTime? FirstDate => Dates.Count == 0 ? null : ParseDate(Dates[^1]);
     public DateTime? LastDate => Dates.Count == 0 ? null : ParseDate(Dates[0]);
-    public DateTime CalendarDisplayDate => LastDate ?? DateTime.Today;
+    public DateTime CalendarDisplayDate => SelectedCalendarDate ?? LastDate ?? DateTime.Today;
 
     public LogisBrowserViewModel(ILogisService service, bool allowAutomaticLogin)
     {
@@ -64,13 +70,51 @@ public partial class LogisBrowserViewModel : ViewModelBase
 
     private static DateTime ParseDate(string date) => DateTime.ParseExact(date, "yyyy/MM/dd", CultureInfo.InvariantCulture);
 
+    public void PrepareOpen(bool allowAutomaticLogin)
+    {
+        _allowAutomaticLogin = allowAutomaticLogin;
+        DownloadedPath = null;
+        RequiresLogin = false;
+        IsSessionExpired = false;
+    }
+
     public async Task InitializeAsync()
     {
         var cancellation = BeginSelection();
         try
         {
-            Servers = await _service.GetServersAsync(cancellation.Token);
-            Status = Servers.Count == 0 ? "Нет доступных серверов." : "Выберите сервер.";
+            if (DownloadCommand.IsRunning && DownloadCommand.ExecutionTask is { } downloading)
+                await downloading;
+            var servers = await _service.GetServersAsync(cancellation.Token);
+            if (!ReferenceEquals(cancellation, _selectionCancellation))
+                return;
+            var selectedServer = SelectedServer;
+            if (!Servers.SequenceEqual(servers, StringComparer.Ordinal))
+            {
+                _restoringSelection = true;
+                try
+                {
+                    Servers = servers;
+                    SelectedServer = selectedServer;
+                }
+                finally
+                {
+                    _restoringSelection = false;
+                }
+            }
+            if (selectedServer is not null && !servers.Contains(selectedServer, StringComparer.Ordinal))
+            {
+                SelectedServer = null;
+                Status = "Ранее выбранный сервер больше недоступен. Выберите сервер.";
+            }
+            else if (selectedServer is not null && Dates.Count == 0)
+                await LoadDatesAsync(selectedServer);
+            else if (selectedServer is not null && SelectedDate is { } date && Logs.Count == 0)
+                await LoadLogsAsync(selectedServer, date);
+            else if (selectedServer is not null)
+                Status = SelectedLog is null ? string.Empty : $"Выбран {SelectedLog.DisplayName}.";
+            else
+                Status = Servers.Count == 0 ? "Нет доступных серверов." : "Выберите сервер.";
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         catch (Exception exception)
@@ -87,6 +131,8 @@ public partial class LogisBrowserViewModel : ViewModelBase
 
     partial void OnSelectedServerChanged(string? value)
     {
+        if (_restoringSelection)
+            return;
         SelectedCalendarDate = null;
         SelectedDate = null;
         Dates = Array.Empty<string>();
@@ -98,6 +144,8 @@ public partial class LogisBrowserViewModel : ViewModelBase
 
     partial void OnSelectedDateChanged(string? value)
     {
+        if (_restoringSelection)
+            return;
         SelectedLog = null;
         Logs = Array.Empty<LogisLogFile>();
         if (value is not null)
@@ -113,6 +161,8 @@ public partial class LogisBrowserViewModel : ViewModelBase
 
     partial void OnSelectedCalendarDateChanged(DateTime? value)
     {
+        if (_restoringSelection)
+            return;
         var date = value?.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
         if (date is not null && !Dates.Contains(date, StringComparer.Ordinal))
         {
@@ -133,7 +183,7 @@ public partial class LogisBrowserViewModel : ViewModelBase
     {
         if (string.IsNullOrWhiteSpace(RoundSearchText))
         {
-            Status = "Выберите лог или введите номер раунда.";
+            Status = string.Empty;
             return;
         }
         if (SelectedDate is null)
@@ -262,6 +312,7 @@ public partial class LogisBrowserViewModel : ViewModelBase
         _selectionCancellation?.Cancel();
         _selectionCancellation?.Dispose();
         _selectionCancellation = null;
+        IsBusy = false;
         DownloadCommand.Cancel();
     }
 }

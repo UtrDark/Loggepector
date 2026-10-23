@@ -62,29 +62,50 @@ internal static class MapRenderer
                 ?? throw new InvalidDataException($"Не удалось прочитать {imagePath}.");
             if (image.Width % 32 != 0 || image.Height % 32 != 0)
                 throw new InvalidDataException($"Размер изображения {imagePath} не кратен размеру тайла 32.");
-            for (var top = 0; top < image.Height; top += 1024)
-            for (var left = 0; left < image.Width; left += 1024)
+            var columns = (image.Width + 1023) / 1024;
+            var rows = (image.Height + 1023) / 1024;
+            var layerChunks = new MapChunk[columns * rows];
+            var completed = 0;
+            await Parallel.ForEachAsync(Enumerable.Range(0, layerChunks.Length), new ParallelOptions
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount - 1, 1, 4),
+                CancellationToken = cancellationToken
+            }, (index, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var top = index / columns * 1024;
+                var left = index % columns * 1024;
                 var width = Math.Min(1024, image.Width - left);
                 var height = Math.Min(1024, image.Height - top);
-                using var tile = new SKBitmap(1024, 1024, SKColorType.Rgba8888, SKAlphaType.Premul);
-                using (var canvas = new SKCanvas(tile))
+                using var pixels = image.PeekPixels()
+                    ?? throw new InvalidDataException("Не удалось получить пиксели карты.");
+                using var tile = pixels.ExtractSubset(new SKRectI(left, top, left + width, top + height))
+                    ?? throw new InvalidDataException("Не удалось получить область чанка.");
+                using var padded = width == 1024 && height == 1024 ? null
+                    : new SKBitmap(1024, 1024, SKColorType.Rgba8888, SKAlphaType.Premul);
+                if (padded is not null)
                 {
+                    using var canvas = new SKCanvas(padded);
                     canvas.Clear(SKColors.Transparent);
                     canvas.DrawBitmap(image, new SKRect(left, top, left + width, top + height),
                         new SKRect(0, 0, width, height));
                 }
+                using var paddedPixels = padded?.PeekPixels();
                 var file = $"chunks/z{z}_x{left / 1024:D2}_y{top / 1024:D2}.png";
-                using var encoded = tile.Encode(SKEncodedImageFormat.Png, 100)
+                using var encoded = (paddedPixels ?? tile).Encode(new SKPngEncoderOptions(SKPngEncoderFilterFlags.Sub, 1))
                     ?? throw new InvalidDataException("Не удалось закодировать PNG-чанк.");
                 using (var stream = File.Create(MapCacheFiles.Resolve(output, file)))
                     encoded.SaveTo(stream);
-                files.Add(file);
-                chunks.Add(new MapChunk(file, z, left / 1024, top / 1024, width, height,
+                layerChunks[index] = new MapChunk(file, z, left / 1024, top / 1024, width, height,
                     left / 32 + 1, (left + width) / 32, (image.Height - top - height) / 32 + 1,
-                    (image.Height - top) / 32));
-            }
+                    (image.Height - top) / 32);
+                var count = Interlocked.Increment(ref completed);
+                if (count % 8 == 0 || count == layerChunks.Length)
+                    progress.Report($"Нарезка {name}: {count}/{layerChunks.Length}");
+                return ValueTask.CompletedTask;
+            });
+            chunks.AddRange(layerChunks);
+            files.AddRange(layerChunks.Select(chunk => chunk.File));
             File.Delete(imagePath);
         }
         await MapCacheFiles.SaveAsync(Path.Combine(output, "manifest.json"),

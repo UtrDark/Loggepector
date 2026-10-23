@@ -1,0 +1,29 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Loggepector.ViewModels"
+        xmlns:models="using:Loggepector.Models"
+        x:Class="Loggepector.Views.MapDownloadWindow" x:DataType="vm:MapDownloadViewModel"
+        Title="Подтверждение скачивания" Width="760" Height="450" MinWidth="520" MinHeight="300"
+        WindowStartupLocation="CenterOwner">
+    <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="12">
+        <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock Grid.Row="1" Text="{Binding Description}" TextWrapping="Wrap" />
+        <TextBlock Grid.Row="2" Text="{Binding FileCount}" Opacity="0.65" />
+        <ListBox Grid.Row="3" ItemsSource="{Binding Files}" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="models:MapDownloadFile">
+                    <StackPanel Margin="4" Spacing="3">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <HyperlinkButton Content="{Binding Url}" NavigateUri="{Binding Url}" Padding="0"
+                                         HorizontalAlignment="Left" />
+                        <TextBlock Text="{Binding SizeLabel}" Opacity="0.65" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+            <Button Content="Отмена" Command="{Binding DeclineCommand}" />
+            <Button Content="Скачать" Command="{Binding ApproveCommand}" />
+        </StackPanel>
+    </Grid>
+</Window>

@@ -7,4 +7,5 @@ namespace Loggepector.Services;
 public interface IMapViewService
 {
     Task<MapDocument> LoadAsync(string mapName, CancellationToken cancellationToken = default);
+    Task<int> GetStationLayerCountAsync(string mapName, CancellationToken cancellationToken = default);
 }

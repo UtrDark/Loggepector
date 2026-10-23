@@ -21,9 +21,9 @@
                                     Watermark="Выберите день" HorizontalAlignment="Stretch" />
             </StackPanel>
         </Grid>
-        <TextBox Grid.Row="1" Text="{Binding RoundSearchText}" Watermark="Номер раунда за выбранный день"
+        <TextBox Grid.Row="1" Text="{Binding RoundSearchText}"
                  IsEnabled="{Binding CanSelect}" />
-        <TextBlock Grid.Row="2" Text="{Binding Status}" TextWrapping="Wrap" />
+        <TextBlock Grid.Row="2" Text="{Binding Status}" IsVisible="{Binding HasStatus}" TextWrapping="Wrap" />
         <TextBlock Grid.Row="3" Text="{Binding ErrorMessage}" Foreground="IndianRed" TextWrapping="Wrap" />
         <ListBox x:Name="RoundsList" Grid.Row="4" ItemsSource="{Binding Logs}" SelectedItem="{Binding SelectedLog}"
                  IsEnabled="{Binding CanSelect}">
