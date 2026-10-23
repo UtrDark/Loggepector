@@ -8,6 +8,7 @@
                     <SolidColorBrush x:Key="AppWindowBrush" Color="#FFFFFF" />
                     <SolidColorBrush x:Key="AppSurfaceBrush" Color="#F5F6F8" />
                     <SolidColorBrush x:Key="AppPanelBrush" Color="#F5FFFFFF" />
+                    <SolidColorBrush x:Key="MapStatusPanelBrush" Color="#C8FFFFFF" />
                     <SolidColorBrush x:Key="AppTextBrush" Color="#202632" />
                     <SolidColorBrush x:Key="AppMutedTextBrush" Color="#5D687A" />
                     <SolidColorBrush x:Key="AppBorderBrush" Color="#D5DAE2" />
@@ -22,6 +23,7 @@
                     <SolidColorBrush x:Key="AppWindowBrush" Color="#101318" />
                     <SolidColorBrush x:Key="AppSurfaceBrush" Color="#14181F" />
                     <SolidColorBrush x:Key="AppPanelBrush" Color="#F5212630" />
+                    <SolidColorBrush x:Key="MapStatusPanelBrush" Color="#C8212630" />
                     <SolidColorBrush x:Key="AppTextBrush" Color="#E4E9F1" />
                     <SolidColorBrush x:Key="AppMutedTextBrush" Color="#A5B0C2" />
                     <SolidColorBrush x:Key="AppBorderBrush" Color="#3A4352" />

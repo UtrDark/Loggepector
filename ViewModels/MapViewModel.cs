@@ -10,7 +10,7 @@ using Loggepector.Services;
 
 namespace Loggepector.ViewModels;
 
-public sealed partial class MapViewModel(string mapName, IMapViewService mapViewService) : ViewModelBase
+public sealed partial class MapViewModel(string mapName, IMapViewService mapViewService, IMapPreparationService mapPreparation) : ViewModelBase
 {
     public required MainWindowViewModel Timeline { get; init; }
 
@@ -28,12 +28,21 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
 
     public bool HasSelectedPoint => SelectedPoint is not null;
 
+    private static string NormalizeMapName(string? name) =>
+        new((name ?? string.Empty).Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+
     public async Task UpdateLogsAsync(IReadOnlyList<ILogEntry> entries)
     {
         var revision = ++_logRevision;
         try
         {
-            var index = await Task.Run(() => new MapLogIndex(entries));
+            var matchingMap = Timeline.MapName is { } logMap && NormalizeMapName(MapName) == NormalizeMapName(logMap);
+            var lavaland = NormalizeMapName(MapName) == NormalizeMapName(AdditionalMaps.LavalandName);
+            var planetaryPort = NormalizeMapName(MapName) == NormalizeMapName(AdditionalMaps.PlanetaryPortName);
+            var index = await Task.Run(() => new MapLogIndex(entries.Where(entry =>
+                planetaryPort ? AdditionalMaps.IsPlanetaryPort(entry) :
+                lavaland ? AdditionalMaps.IsLavaland(entry) :
+                matchingMap && !AdditionalMaps.IsLavaland(entry) && !AdditionalMaps.IsPlanetaryPort(entry)).ToArray()));
             if (revision != _logRevision)
                 return;
             LogIndex = index;
@@ -64,7 +73,97 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
         PointEntries = Array.Empty<LogEntryViewModel>();
     }
 
-    public string MapName { get; } = mapName;
+    [ObservableProperty]
+    private string _mapName = mapName;
+
+    [ObservableProperty]
+    private IReadOnlyList<string> _availableMaps = Array.Empty<string>();
+
+    private CancellationToken _lifetime;
+    private CancellationTokenSource? _mapLoadCancellation;
+    private readonly List<Task> _mapLoads = new();
+    public Func<Task>? ReleaseMapResourcesAsync { get; set; }
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RemoveMapToolsCommand))]
+    private bool _hasMapTools;
+
+    public void RefreshMapToolsState() => HasMapTools = mapPreparation.HasLocalData;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RemoveMapToolsCommand))]
+    private bool _isRemovingMapTools;
+
+    private bool CanRemoveMapTools => HasMapTools && !IsRemovingMapTools;
+
+    [RelayCommand(CanExecute = nameof(CanRemoveMapTools))]
+    private async Task RemoveMapTools(CancellationToken cancellationToken)
+    {
+        IsRemovingMapTools = true;
+        Status = "Удаление данных карт…";
+        try
+        {
+            _mapLoadCancellation?.Cancel();
+            Timeline.CancelMapToolsCommand.Execute(null);
+            await Task.WhenAll(_mapLoads.ToArray());
+            _logRevision++;
+            ClosePoint();
+            MapName = string.Empty;
+            AvailableMaps = Array.Empty<string>();
+            Layers = Array.Empty<int>();
+            LogIndex = null;
+            Document = null;
+            FocusLocation = null;
+            var release = ReleaseMapResourcesAsync
+                ?? throw new InvalidOperationException("Не подключено освобождение ресурсов карты.");
+            await release();
+            await Timeline.RemoveMapToolsAsync(cancellationToken);
+            Status = string.Empty;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            Status = "Удаление данных карт отменено.";
+        }
+        catch (Exception exception)
+        {
+            Status = $"Не удалось удалить данные карт: {exception.Message}";
+        }
+        finally
+        {
+            IsRemovingMapTools = false;
+            RefreshMapToolsState();
+        }
+    }
+
+    private Task StartMapLoad()
+    {
+        _mapLoads.RemoveAll(task => task.IsCompleted);
+        var task = LoadSelectedMapAsync();
+        _mapLoads.Add(task);
+        return task;
+    }
+
+    partial void OnMapNameChanged(string value)
+    {
+        if (IsRemovingMapTools && !string.IsNullOrWhiteSpace(value))
+            return;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            _mapLoadCancellation?.Cancel();
+            Document = null;
+            return;
+        }
+        FocusLocation = null;
+        ClosePoint();
+        _ = UpdateLogsAsync(Timeline.Logs.Select(log => log.Entry).ToArray());
+        _ = StartMapLoad();
+    }
+
+    [RelayCommand]
+    private void FocusLogTime(LogEntryViewModel entry) => Timeline.FocusLogTime(entry.Entry, (double)TimeCaptureRadius);
+
+    [ObservableProperty]
+    private decimal _timeCaptureRadius = 3;
 
     [ObservableProperty]
     private MapLocation? _focusLocation;
@@ -91,6 +190,23 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
     [NotifyPropertyChangedFor(nameof(HasStatus))]
     private string _status = string.Empty;
 
+    private int _statusRevision;
+
+    partial void OnStatusChanged(string value) => _statusRevision++;
+
+    private async Task ShowCoordinateWarningAsync(MapLocation location)
+    {
+        Status = $"Координаты ({location.X}, {location.Y}, {location.Z}) находятся вне карты станции.";
+        var revision = ++_statusRevision;
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(4), _lifetime);
+            if (revision == _statusRevision)
+                Status = string.Empty;
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
+    }
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(LayerUpCommand))]
     [NotifyCanExecuteChangedFor(nameof(LayerDownCommand))]
@@ -103,40 +219,92 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
     [RelayCommand]
     private async Task EnableMapTools(CancellationToken cancellationToken)
     {
-        await Timeline.EnableMapToolsCommand.ExecuteAsync(null);
-        await LoadAsync(cancellationToken);
+        try
+        {
+            await Timeline.EnableMapToolsCommand.ExecuteAsync(null);
+            if (Timeline.AreMapsReady)
+                await LoadAsync(_lifetime);
+        }
+        finally
+        {
+            RefreshMapToolsState();
+        }
     }
 
     public async Task LoadAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(MapName))
-        {
-            Status = "Откройте лог с названием карты станции.";
-            return;
-        }
-        IsLoading = true;
-        Document = null;
-        Status = "Загрузка карты…";
+        _lifetime = cancellationToken;
+        RefreshMapToolsState();
         try
         {
-            var document = await Task.Run(() => mapViewService.LoadAsync(MapName, cancellationToken), cancellationToken);
+            var maps = await mapPreparation.GetMapsAsync(cancellationToken);
+            if (IsRemovingMapTools)
+                return;
+            AvailableMaps = maps;
+            if (!string.IsNullOrWhiteSpace(MapName))
+                await StartMapLoad();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception exception)
+        {
+            Status = exception.Message;
+        }
+    }
+
+    private async Task LoadSelectedMapAsync()
+    {
+        _mapLoadCancellation?.Cancel();
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime);
+        _mapLoadCancellation = cancellation;
+        var selectedMap = MapName;
+        IsLoading = true;
+        Document = null;
+        Status = "Подготовка выбранной карты…";
+        try
+        {
+            var progress = new Progress<string>(value =>
+            {
+                if (ReferenceEquals(_mapLoadCancellation, cancellation))
+                    Status = value;
+            });
+            await Task.Run(() => mapPreparation.RenderAsync(selectedMap, progress, cancellation.Token), cancellation.Token);
+            var document = await Task.Run(async () =>
+            {
+                var loaded = await mapViewService.LoadAsync(selectedMap, cancellation.Token);
+                if (NormalizeMapName(selectedMap) == NormalizeMapName(AdditionalMaps.LavalandName))
+                {
+                    var worldLayer = Timeline.MapName is { Length: > 0 } station
+                        ? await mapViewService.GetStationLayerCountAsync(station, cancellation.Token) + 2
+                        : loaded.DefaultLayer;
+                    loaded = loaded with { WorldZOffset = worldLayer - loaded.DefaultLayer };
+                }
+                return loaded;
+            }, cancellation.Token);
+            if (!ReferenceEquals(_mapLoadCancellation, cancellation))
+                return;
             Layers = document.Layers;
             SelectedLayer = document.DefaultLayer;
             Document = document;
             Status = string.Empty;
             ApplyFocus();
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {
-            Status = "Загрузка карты остановлена.";
+            if (ReferenceEquals(_mapLoadCancellation, cancellation))
+                Status = "Загрузка карты отменена.";
         }
         catch (Exception exception)
         {
-            Status = exception.Message;
+            if (ReferenceEquals(_mapLoadCancellation, cancellation))
+                Status = exception.Message;
         }
         finally
         {
-            IsLoading = false;
+            if (ReferenceEquals(_mapLoadCancellation, cancellation))
+            {
+                _mapLoadCancellation = null;
+                IsLoading = false;
+            }
         }
     }
 
@@ -164,7 +332,7 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
         if (!Layers.Contains(layer) || location.X < 1 || location.Y < 1 ||
             location.X > map.Width / map.TileSize || location.Y > map.Height / map.TileSize)
         {
-            Status = $"Координаты ({location.X}, {location.Y}, {location.Z}) находятся вне карты станции.";
+            _ = ShowCoordinateWarningAsync(location);
             return;
         }
         SelectedLayer = layer;

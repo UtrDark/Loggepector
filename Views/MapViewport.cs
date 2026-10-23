@@ -43,7 +43,8 @@ public sealed class MapViewport : Panel
     private const long CacheBudget = 192L * 1024 * 1024;
     private readonly Dictionary<TileKey, CachedTile> _cache = new();
     private readonly Dictionary<int, MapLayerControl> _layers = new();
-    private readonly CancellationTokenSource _lifetime = new();
+    private CancellationTokenSource _lifetime = new();
+    private Task _loadTask = Task.CompletedTask;
     private MapViewTile[] _visible = Array.Empty<MapViewTile>();
     private readonly HashSet<TileKey> _drawn = new();
     private Vector _offset;
@@ -276,7 +277,7 @@ public sealed class MapViewport : Panel
             _offset.Y + (map.Height - (point.Y - 0.5) * map.TileSize) * Zoom), Zoom);
         TrimCache();
         if (!_loading && !_loadFailed)
-            _ = LoadVisibleAsync();
+            _loadTask = LoadVisibleAsync();
     }
 
     private void UpdateLayers()
@@ -388,6 +389,19 @@ public sealed class MapViewport : Panel
             bytes -= tile.Bytes;
             tile.Bitmap.Dispose();
         }
+    }
+
+    public async Task ClearAsync()
+    {
+        Document = null;
+        _lifetime.Cancel();
+        await _loadTask;
+        foreach (var tile in _cache.Values)
+            tile.Bitmap.Dispose();
+        _cache.Clear();
+        _drawn.Clear();
+        _lifetime.Dispose();
+        _lifetime = new CancellationTokenSource();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
