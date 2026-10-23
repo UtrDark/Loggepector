@@ -10,7 +10,7 @@ namespace Loggepector.Utils;
 internal static class LogMessageSanitizer
 {
     private static readonly Regex Key = new(
-        @"^\[[^\]\r\n]+\] (?:[A-Z][A-Z0-9_ ]*: ?)?(?:(?:Mob (?:Login|Logout)|Latejoin): )?(?<key>[^/:\r\n]+?)/\(|(?<key>[A-Za-z0-9_@-]+)/\(|(?:priv_msg=|ckey\s*[:=]\s*|Mob (?:Login|Logout):\s*)(?<key>[A-Za-z0-9_@-]+)|^\[[^\]\r\n]+\] MISC: ?(?<key>[A-Za-z0-9_@-]+)\s*\\",
+        @"^\[[^\]\r\n]+\] (?:[A-Z][A-Z0-9_ ]*: ?)?(?:(?:Mob (?:Login|Logout)|Latejoin): )?(?<key>[^/:\r\n]+?)/\(|(?<key>[A-Za-z0-9_@-]+)/\(|(?:priv_msg=|ckey\s*[:=]\s*|Mob (?:Login|Logout):\s*)(?<key>[A-Za-z0-9_@-]+)|^\[[^\]\r\n]+\] MISC: ?(?<key>[A-Za-z0-9_@-]+)\s*\\|(?<![\w:])(?<key>[A-Za-z0-9_@-]+)\s+(?=\(as [^\r\n]*? at -?\d+\s*,\s*-?\d+\s*,\s*-?\d+\))",
         RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Multiline);
 
     private static readonly Regex Address = new(

@@ -8,15 +8,19 @@ using Loggepector.Utils;
 
 namespace Loggepector.ViewModels;
 
-public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart, bool relative = true) : ViewModelBase
+public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart, bool relative = true, bool showArea = false) : ViewModelBase
 {
     public ILogEntry Entry { get; } = entry;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TimeLabel))]
+    [NotifyPropertyChangedFor(nameof(TimeParts))]
     private bool _relative = relative;
 
     public string TimeLabel => Relative ? _relativeTime : _serverTime;
+
+    public IReadOnlyList<LogMessagePart> TimeParts => new[] { new LogMessagePart(TimeLabel, LogMessagePartKind.Text) };
+    public IReadOnlyList<LogMessagePart> TypeParts { get; } = new[] { new LogMessagePart(entry.Type, LogMessagePartKind.Text) };
 
     private readonly string _relativeTime = FormatTime(entry.Timestamp - roundStart);
     private readonly string _serverTime = entry.Timestamp.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
@@ -29,7 +33,22 @@ public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart, boo
     public string RawMessage => Entry.GetRawMessage();
 
     private IReadOnlyList<LogMessagePart>? _messageParts;
-    public IReadOnlyList<LogMessagePart> MessageParts => _messageParts ??= LogMessageHighlights.Create(Entry, Message);
+    public IReadOnlyList<LogMessagePart> MessageParts => _messageParts ??= LogMessageHighlights.Create(Entry, Message, ShowArea);
+
+    [ObservableProperty]
+    private bool _showArea = showArea;
+
+    partial void OnShowAreaChanged(bool value)
+    {
+        _messageParts = null;
+        OnPropertyChanged(nameof(MessageParts));
+    }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanExpand))]
+    private bool _isTextClipped;
+
+    public bool CanExpand => IsMultiline || IsTextClipped || IsExpanded;
 
     public bool IsMultiline => Message.Contains('\n') || Message.Contains('\r');
 
@@ -52,8 +71,20 @@ public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart, boo
 
     public IBrush RowBackground => LogDisplayConfig.GetType(Entry.Type).Background;
 
+    public IBrush AlternateRowOverlay => LogDisplayConfig.AlternateRowOverlay;
+
+    [ObservableProperty]
+    private bool _isAlternate;
+
+    [ObservableProperty]
+    private bool _isFindMatch;
+
+    [ObservableProperty]
+    private bool _isCurrentFindMatch;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ExpandLabel))]
+    [NotifyPropertyChangedFor(nameof(CanExpand))]
     private bool _isExpanded;
 
     public string ExpandLabel => IsExpanded ? "▴" : "▾";

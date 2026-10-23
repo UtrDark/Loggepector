@@ -18,5 +18,6 @@ public interface ILogService
     IReadOnlyDictionary<string, IReadOnlyList<PlayerJoin>> GetPlayerJoins();
     IReadOnlyDictionary<string, IReadOnlyList<PlayerAntagonist>> GetPlayerAntagonists();
     IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, params string[] types);
-    IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, IReadOnlyList<string> types, IReadOnlyList<string> ckeys, string searchText = "");
+    IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, IReadOnlyList<string> types, IReadOnlyList<string> ckeys,
+        string searchText = "", bool fuzzy = false, IReadOnlyList<LogMessagePart>? badges = null);
 }

@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Linq;
+using System.Collections.Generic;
 using Loggepector.Utils;
 
 namespace Loggepector.Models;
@@ -17,6 +19,11 @@ public record LogEntry(DateTime Timestamp, string Type, string Message, int Line
 
     private string? _formattedMessage;
     private string? _logMessage;
+    private IReadOnlyList<LogMessagePart>? _searchBadges;
+
+    internal IReadOnlyList<LogMessagePart> GetSearchBadges() => _searchBadges ??=
+        LogMessageHighlights.Create(this, GetLogMessage(), true)
+            .Where(part => part.Kind != LogMessagePartKind.Text).ToArray();
     private string? _coordinatesSource;
     private (int X, int Y, int Z)? _coordinates;
 
