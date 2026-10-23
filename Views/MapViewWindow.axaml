@@ -54,6 +54,8 @@
                                     <StackPanel Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="{Binding TimeLabel}" />
                                         <TextBlock Text="{Binding Entry.Type}" Foreground="{Binding TypeColor}" />
+                                        <TextBlock Text="{Binding ChannelLabel}" Foreground="{Binding ChannelColor}"
+                                                   IsVisible="{Binding HasChannel}" FontWeight="SemiBold" />
                                     </StackPanel>
                                     <SelectableTextBlock Text="{Binding Message}" TextWrapping="Wrap" />
                                 </StackPanel>
