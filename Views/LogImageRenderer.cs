@@ -10,6 +10,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Layout;
 using Loggepector.ViewModels;
 using Loggepector.Utils;
+using Loggepector.Models;
 
 namespace Loggepector.Views;
 
@@ -44,12 +45,7 @@ internal static class LogImageRenderer
             var message = new LogMessageTextBlock
             {
                 DarkTheme = dark,
-                Parts = sanitize
-                    ? LogMessageHighlights.Create(log.Entry, HiddenKey.Replace(
-                        LogMessageSanitizer.Clear(log.Entry.GetClearLogMessage(), keys), string.Empty), log.ShowArea)
-                        .Select(part => part with { Text = HiddenKey.Replace(LogMessageSanitizer.Clear(part.Text, keys), string.Empty) })
-                        .Where(part => part.Text.Length > 0).ToArray()
-                    : log.MessageParts,
+                Parts = sanitize ? SanitizeParts(log, keys) : log.MessageParts,
                 Foreground = foreground,
                 TextWrapping = TextWrapping.Wrap
             };
@@ -61,13 +57,12 @@ internal static class LogImageRenderer
             rows.Children.Add(new Border
             {
                 Background = log.RowBackground,
-                Padding = new Thickness(12, 10),
                 Child = new Grid
                 {
                     Children =
                     {
                         new Border { Background = rows.Children.Count % 2 != 0 ? LogDisplayConfig.AlternateRowOverlay : Brushes.Transparent },
-                        row
+                        new Border { Padding = new Thickness(12, 10), Child = row }
                     }
                 }
             });
@@ -97,5 +92,17 @@ internal static class LogImageRenderer
             bitmap.Dispose();
             throw;
         }
+    }
+
+    private static IReadOnlyList<LogMessagePart> SanitizeParts(LogEntryViewModel log, Regex? keys)
+    {
+        var knownKeys = (log.Entry as LogEntry)?.SensitiveKeys;
+        return log.MessageParts.Where(part => part.Kind != LogMessagePartKind.CKey)
+            .Select(part => part with
+            {
+                Text = HiddenKey.Replace(LogMessageSanitizer.Clear(
+                    LogMessageSanitizer.Clear(part.Text, knownKeys), keys), string.Empty)
+            })
+            .Where(part => !string.IsNullOrEmpty(part.Text)).ToArray();
     }
 }
