@@ -122,7 +122,8 @@
                                         </Button.Flyout>
                                     </Button>
                                     </Grid>
-                                    <views:LogMessageTextBlock Parts="{Binding MessageParts}" TextWrapping="Wrap" />
+                                    <views:LogMessageTextBlock Parts="{Binding MessageParts}" TextWrapping="Wrap"
+                                        BadgeSearchCommand="{Binding $parent[Window].((vm:MapViewModel)DataContext).Timeline.SearchBadgeCommand}" />
                                 </StackPanel>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
