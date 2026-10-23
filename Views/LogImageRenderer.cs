@@ -15,13 +15,13 @@ namespace Loggepector.Views;
 internal static class LogImageRenderer
 {
     private static readonly Regex HiddenKey = new(@"\(\s*\[CKEY\]\s*\)|\[CKEY\]", RegexOptions.Compiled);
-    internal static RenderTargetBitmap Render(IReadOnlyList<LogEntryViewModel> logs, bool dark)
+    internal static RenderTargetBitmap Render(IReadOnlyList<LogEntryViewModel> logs, bool dark, bool sanitize)
     {
         const int width = 1200;
         var foreground = Brush.Parse(dark ? "#E4E9F1" : "#202632");
         var background = Brush.Parse(dark ? "#101318" : "#FFFFFF");
         var rows = new StackPanel { Spacing = 2 };
-        var keys = LogMessageSanitizer.CreateKeyPattern(logs.Select(log => log.Entry));
+        var keys = sanitize ? LogMessageSanitizer.CreateKeyPattern(logs.Select(log => log.Entry)) : null;
         foreach (var log in logs)
         {
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("90,130,Auto,*") };
@@ -42,7 +42,7 @@ internal static class LogImageRenderer
             };
             var message = new TextBlock
             {
-                Text = HiddenKey.Replace(log.Entry.GetClearLogMessage(), string.Empty),
+                Text = sanitize ? HiddenKey.Replace(log.Entry.GetClearLogMessage(), string.Empty) : log.Message,
                 Foreground = foreground,
                 TextWrapping = TextWrapping.Wrap
             };
@@ -54,7 +54,7 @@ internal static class LogImageRenderer
             {
                 var channel = new TextBlock
                 {
-                    Text = HiddenKey.Replace(LogMessageSanitizer.Clear(log.ChannelLabel, keys), string.Empty),
+                    Text = sanitize ? HiddenKey.Replace(LogMessageSanitizer.Clear(log.ChannelLabel, keys), string.Empty) : log.ChannelLabel,
                     Foreground = log.ChannelColor,
                     FontWeight = FontWeight.SemiBold,
                     Margin = new Thickness(0, 0, 10, 0)

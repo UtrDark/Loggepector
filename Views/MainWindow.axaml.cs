@@ -138,7 +138,7 @@ public partial class MainWindow : Window
             var clipboard = Clipboard ?? throw new InvalidOperationException("Буфер обмена недоступен.");
             var selected = LogsList.SelectedItems!.Cast<LogEntryViewModel>()
                 .OrderBy(log => log.Entry.Timestamp).ThenBy(log => log.Entry.LineNumber).ToArray();
-            using var bitmap = LogImageRenderer.Render(selected, ActualThemeVariant == ThemeVariant.Dark);
+            using var bitmap = LogImageRenderer.Render(selected, ActualThemeVariant == ThemeVariant.Dark, viewModel.Sanitize);
             using var stream = new MemoryStream();
             bitmap.Save(stream);
             var item = new DataTransferItem();
@@ -192,6 +192,8 @@ public partial class MainWindow : Window
         {
             if (args.PropertyName == nameof(MainWindowViewModel.Logs))
                 await mapModel.UpdateLogsAsync(viewModel.Logs.Select(log => log.Entry).ToArray());
+            if (args.PropertyName == nameof(MainWindowViewModel.Relative))
+                mapModel.UpdateTimeDisplay();
         }
         viewModel.PropertyChanged += UpdateMapLogs;
         _ = mapModel.UpdateLogsAsync(viewModel.Logs.Select(log => log.Entry).ToArray());

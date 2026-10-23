@@ -19,6 +19,18 @@ public partial class MainWindowViewModel : ViewModelBase
     private int _contextRevision;
 
     [ObservableProperty]
+    private bool _sanitize = true;
+
+    [ObservableProperty]
+    private bool _relative = true;
+
+    partial void OnRelativeChanged(bool value)
+    {
+        foreach (var log in Logs.Concat(SelectedLogs).Distinct())
+            log.Relative = value;
+    }
+
+    [ObservableProperty]
     private bool _captureSameType;
 
     [ObservableProperty]
@@ -459,7 +471,7 @@ public partial class MainWindowViewModel : ViewModelBase
             var previous = Logs.ToDictionary(log => log.Entry.LineNumber);
             var selected = SelectedLogs.Select(log => log.Entry.LineNumber).ToHashSet();
             Logs = entries.Select(entry => previous.TryGetValue(entry.LineNumber, out var log) && ReferenceEquals(log.Entry, entry)
-                ? log : new LogEntryViewModel(entry, RoundStartTime)).ToArray();
+                ? log : new LogEntryViewModel(entry, RoundStartTime, Relative)).ToArray();
             SelectedLogs.Clear();
             foreach (var log in Logs.Where(log => selected.Contains(log.Entry.LineNumber)))
                 SelectedLogs.Add(log);

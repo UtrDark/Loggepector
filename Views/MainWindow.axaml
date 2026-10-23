@@ -75,6 +75,8 @@
                     </Flyout>
                 </Button.Flyout>
             </Button>
+            <CheckBox Content="Sanitize" IsChecked="{Binding Sanitize, Mode=TwoWay}" Margin="12,0,0,0" />
+            <CheckBox Content="Relative" IsChecked="{Binding Relative, Mode=TwoWay}" Margin="12,0,0,0" />
             </DockPanel>
             <WrapPanel>
                 <CheckBox Content="Соседние" IsChecked="{Binding CaptureSameType, Mode=TwoWay}" Margin="0,0,8,0" />
