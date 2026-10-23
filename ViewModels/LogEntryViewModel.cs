@@ -6,11 +6,18 @@ using Loggepector.Models;
 
 namespace Loggepector.ViewModels;
 
-public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart) : ViewModelBase
+public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart, bool relative = true) : ViewModelBase
 {
     public ILogEntry Entry { get; } = entry;
 
-    public string TimeLabel { get; } = FormatTime(entry.Timestamp - roundStart);
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TimeLabel))]
+    private bool _relative = relative;
+
+    public string TimeLabel => Relative ? _relativeTime : _serverTime;
+
+    private readonly string _relativeTime = FormatTime(entry.Timestamp - roundStart);
+    private readonly string _serverTime = entry.Timestamp.ToString("HH:mm:ss.fff", CultureInfo.InvariantCulture);
 
     private static string FormatTime(TimeSpan time) => string.Create(CultureInfo.InvariantCulture,
         $"{(long)time.TotalHours:00}:{time.Minutes:00}:{time.Seconds:00}.{time.Milliseconds:000}");

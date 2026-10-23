@@ -62,7 +62,7 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
             ClosePoint();
             return;
         }
-        PointEntries = point.Entries.Select(entry => new LogEntryViewModel(entry, Timeline.RoundStartTime)).ToArray();
+        PointEntries = point.Entries.Select(entry => new LogEntryViewModel(entry, Timeline.RoundStartTime, Timeline.Relative)).ToArray();
         SelectedPoint = point;
     }
 
@@ -71,6 +71,12 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
     {
         SelectedPoint = null;
         PointEntries = Array.Empty<LogEntryViewModel>();
+    }
+
+    public void UpdateTimeDisplay()
+    {
+        foreach (var entry in PointEntries)
+            entry.Relative = Timeline.Relative;
     }
 
     [ObservableProperty]
