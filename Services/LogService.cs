@@ -176,7 +176,8 @@ public sealed class LogService(IPlayerJoinService playerJoinService, IBigLogServ
                     .OrderByDescending(key => key.Length).Select(Regex.Escape)) +
                 @")(?![\p{L}\p{N}_-])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
         var sensitiveKeys = LogMessageSanitizer.CreateKeyPattern(entries);
-        sorted = sorted.Select(entry => ((LogEntry)entry) with { SensitiveKeys = sensitiveKeys }).ToArray();
+        var characterNames = LogMessageHighlights.GetCharacterNames(entries);
+        sorted = sorted.Select(entry => ((LogEntry)entry) with { SensitiveKeys = sensitiveKeys, CharacterNames = characterNames }).ToArray();
         var mapName = sorted.Where(entry => entry.Type == "DEBUG")
             .Select(entry => LoadingMap.Match(entry.GetRawMessage())).FirstOrDefault(match => match.Success)
             ?.Groups["map"].Value;

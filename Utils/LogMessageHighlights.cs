@@ -15,6 +15,15 @@ internal static class LogMessageHighlights
     private static readonly Regex Mob = new(@"\s*\(mob_\d+\)", RegexOptions.Compiled);
     private static readonly Regex NoKey = new(@"(?:\(\s*\*no key\*\s*\)|\*no key\*)[ \t]*", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ActingAs = new(@"(?:(?<![\w:])(?<key>[A-Za-z0-9_@-]+)\s+)?\(as (?<name>.*?) at -?\d+\s*,\s*-?\d+\s*,\s*-?\d+\)", RegexOptions.Compiled);
+    private static readonly Regex SpellTarget = new(@"\bcast the spell .+? on / at (?<name>.+?)\.[ \t]*$", RegexOptions.Compiled);
+    private static readonly Regex PointTarget = new(@"\bpoints at (?<name>.+?)[ \t]*$", RegexOptions.Compiled);
+
+    internal static IReadOnlySet<string> GetCharacterNames(IEnumerable<ILogEntry> entries) => entries
+        .SelectMany(entry => Actor.Matches(entry.GetRawMessage()).Cast<Match>()
+            .Concat(ActingAs.Matches(entry.GetRawMessage()).Cast<Match>())
+            .Concat(Join.Matches(entry.GetRawMessage()).Cast<Match>()))
+        .Select(match => match.Groups["name"].Value.Trim())
+        .Where(name => name.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     public static IReadOnlyList<LogMessagePart> Create(ILogEntry entry, string message, bool showArea = false)
     {
@@ -24,6 +33,13 @@ internal static class LogMessageHighlights
         static string AreaName(Match match) => match.Groups["area"].Value.Replace("\r", string.Empty).Replace("\n", string.Empty).Trim();
         message = Mob.Replace(Area.Replace(message, match => inlineAreas ? AreaName(match) : string.Empty), string.Empty).TrimEnd();
         var identities = new Dictionary<string, LogMessagePartKind>(StringComparer.OrdinalIgnoreCase);
+        if (entry is LogEntry { CharacterNames: { } names } && (entry.Type is "ATTACK" or "EMOTE"))
+        {
+            var source = Area.Replace(entry.GetRawMessage(), string.Empty).TrimEnd();
+            var target = (entry.Type == "ATTACK" ? SpellTarget : PointTarget).Match(source);
+            if (target.Success && names.Contains(target.Groups["name"].Value.Trim()))
+                identities[target.Groups["name"].Value.Trim()] = LogMessagePartKind.CharacterName;
+        }
         if (showArea && inlineAreas)
             foreach (var location in locations)
                 identities[AreaName(location)] = LogMessagePartKind.Area;

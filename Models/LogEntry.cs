@@ -30,6 +30,7 @@ public record LogEntry(DateTime Timestamp, string Type, string Message, int Line
     public string RawMessage { get; init; } = Message;
 
     internal Regex? SensitiveKeys { get; init; }
+    internal IReadOnlySet<string>? CharacterNames { get; init; }
 
     public bool HasCoordinates => GetCoordinates() is not null;
 
