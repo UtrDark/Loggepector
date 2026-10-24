@@ -12,7 +12,7 @@ using Loggepector.Utils;
 
 namespace Loggepector.Services;
 
-public sealed class LogService(IPlayerJoinService playerJoinService) : ILogService
+public sealed class LogService(IPlayerJoinService playerJoinService, IBigLogService bigLogService) : ILogService
 {
     private static readonly Regex LoadingMap = new(
         @"^\[[^\]\r\n]+\] DEBUG: ?Loading (?<map>[^\r\n]+?)\.{3}[ \t]*$", RegexOptions.Compiled);
@@ -30,6 +30,7 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
     public TimeSpan Duration => Volatile.Read(ref _snapshot)?.Duration ?? TimeSpan.Zero;
 
     public string? MapName => Volatile.Read(ref _snapshot)?.MapName;
+    public string? RoundEndHtml => Volatile.Read(ref _snapshot)?.RoundEndHtml;
 
     public async Task LoadAsync(string path, CancellationToken cancellationToken = default, IProgress<int>? progress = null)
     {
@@ -50,6 +51,24 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
     public IReadOnlyList<string> GetTypes() =>
         Volatile.Read(ref _snapshot)!.Entries.Select(entry => entry.Type).Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(type => type, StringComparer.Ordinal).ToArray();
+
+    public async Task LoadBigAsync(string path, Func<MapDownloadStage, CancellationToken, Task<bool>> confirmDownload,
+        CancellationToken cancellationToken = default, IProgress<int>? progress = null)
+    {
+        progress?.Report(0);
+        var snapshot = await Task.Run(async () =>
+        {
+            var data = await bigLogService.LoadAsync(path, confirmDownload, progress, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            var parsed = CreateSnapshot(data.Entries, data.MapName, data.PlayerKeys, data.RoundEndHtml);
+            cancellationToken.ThrowIfCancellationRequested();
+            playerJoinService.Process(parsed.Entries.Where(entry => entry.Type == "MISC"));
+            return parsed;
+        }, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        Volatile.Write(ref _snapshot, snapshot);
+        progress?.Report(100);
+    }
 
     public IReadOnlyList<string> GetCKeys() =>
         Volatile.Read(ref _snapshot)!.Players.Keys.OrderBy(key => key, StringComparer.Ordinal).ToArray();
@@ -127,16 +146,27 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
             progress?.Report((int)Math.Floor(stream.Position * 90.0 / fileLength));
         }
 
+        var roundEndPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, "round_end_data.html");
+        var roundEndHtml = File.Exists(roundEndPath)
+            ? await File.ReadAllTextAsync(roundEndPath, cancellationToken).ConfigureAwait(false) : null;
+        return CreateSnapshot(entries, roundEndHtml: roundEndHtml);
+    }
+
+    private static Snapshot CreateSnapshot(IReadOnlyList<ILogEntry> entries, string? detectedMap = null, IReadOnlyList<string>? playerKeys = null, string? roundEndHtml = null)
+    {
         var sorted = entries.Select(entry => entry is ForcedSayLogEntry || entry.GetRawMessage().Contains("[FAI]", StringComparison.Ordinal)
                 ? ((LogEntry)entry) with { Type = "AI" } : entry)
             .OrderBy(entry => entry.Timestamp).ThenBy(entry => entry.LineNumber)
             .ToArray();
         var startTime = sorted.Length == 0 ? default : sorted[0].Timestamp;
+        var tickets = new TicketLogParser();
+        sorted = sorted.Select(tickets.Parse).OfType<ILogEntry>().ToArray();
         var duration = sorted.Length == 0 ? TimeSpan.Zero : sorted[^1].Timestamp - startTime;
         var players = entries.Where(entry => entry.Type == "ACCESS")
             .Select(entry => Regex.Match(entry.GetRawMessage(), @"^\[[^\]\r\n]+\] ACCESS: ?Mob Login: (?<key>.+?)/\("))
             .Where(match => match.Success)
             .Select(match => match.Groups["key"].Value)
+            .Concat(playerKeys ?? Array.Empty<string>())
             .Where(key => key != "*no key*")
             .GroupBy(CKey.Normalize)
             .Where(group => group.Key.Length > 0)
@@ -150,9 +180,9 @@ public sealed class LogService(IPlayerJoinService playerJoinService) : ILogServi
         var mapName = sorted.Where(entry => entry.Type == "DEBUG")
             .Select(entry => LoadingMap.Match(entry.GetRawMessage())).FirstOrDefault(match => match.Success)
             ?.Groups["map"].Value;
-        return new Snapshot(startTime, duration, entries.Count, sorted, players, mapName);
+        return new Snapshot(startTime, duration, sorted.Length, sorted, players, mapName ?? detectedMap, roundEndHtml);
     }
 
     private sealed record Snapshot(DateTime StartTime, TimeSpan Duration, int Count, ILogEntry[] Entries,
-        Dictionary<string, Regex> Players, string? MapName);
+        Dictionary<string, Regex> Players, string? MapName, string? RoundEndHtml);
 }

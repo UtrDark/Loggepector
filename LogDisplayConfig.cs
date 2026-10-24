@@ -41,7 +41,8 @@ public static class LogDisplayConfig
             [LogMessagePartKind.Oxy] = CreateBadgeStyle("#57B8F0"),
             [LogMessagePartKind.Health] = CreateBadgeStyle("#61B390"),
             [LogMessagePartKind.DamageType] = CreateBadgeStyle("#CD6464"),
-            [LogMessagePartKind.Area] = CreateBadgeStyle("#829BAE")
+            [LogMessagePartKind.Area] = CreateBadgeStyle("#829BAE"),
+            [LogMessagePartKind.Ticket] = CreateBadgeStyle("#D2AB62")
         };
 
     private static (IBrush Foreground, IBrush Background, IBrush Border) CreateBadgeStyle(string value)
@@ -95,6 +96,7 @@ public static class LogDisplayConfig
             ["ACCESS"] = CreateStyle("#B68A36"),
             ["ATTACK"] = CreateStyle("#CD6464"),
             ["ADMIN"] = CreateStyle("#B85B9D"),
+            ["TICKETS"] = CreateStyle("#D2AB62"),
             ["EMOTE"] = CreateStyle("#459C9C")
         };
 

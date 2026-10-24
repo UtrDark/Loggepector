@@ -17,7 +17,9 @@ public enum LogMessagePartKind
     Oxy,
     Health,
     DamageType,
-    Area
+    Area,
+    Ticket,
+    Emoji
 }
 
 public sealed record LogMessagePart(string Text, LogMessagePartKind Kind, string? Channel = null);

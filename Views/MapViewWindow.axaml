@@ -16,37 +16,14 @@
         <Style Selector="FlyoutPresenter.rawLog /template/ ScrollViewer">
             <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
         </Style>
-        <Style Selector="FlyoutPresenter.mapTools">
-            <Setter Property="MaxWidth" Value="480" />
-            <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
-        </Style>
-        <Style Selector="FlyoutPresenter.mapTools /template/ ScrollViewer">
-            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
-        </Style>
     </Window.Styles>
     <Grid RowDefinitions="Auto,*">
         <Border Padding="16,10" Background="{DynamicResource AppPanelBrush}">
             <StackPanel Spacing="8">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" IsEnabled="{Binding !IsRemovingMapTools}">
+                <Grid IsEnabled="{Binding !IsRemovingMapTools}">
                     <ComboBox ItemsSource="{Binding AvailableMaps}" SelectedItem="{Binding MapName, Mode=TwoWay}"
                               PlaceholderText="Выберите карту" MinWidth="180" HorizontalAlignment="Left"
                               IsEnabled="{Binding !Timeline.IsMapToolsBusy}" />
-                    <Button Grid.Column="1" Content="Инструменты карт ▾" Click="RefreshMapToolsState">
-                        <Button.Flyout>
-                            <Flyout FlyoutPresenterClasses="mapTools">
-                                <StackPanel Width="440" Spacing="10" IsEnabled="{Binding !IsRemovingMapTools}">
-                                    <TextBlock Text="Репозиторий карт" />
-                                    <TextBox Text="{Binding Timeline.MapRepositoryUrl}" Watermark="Ссылка на репозиторий GitHub"
-                                             IsEnabled="{Binding !Timeline.IsMapToolsBusy}" />
-                                    <Button Content="Включить и скачать" Command="{Binding EnableMapToolsCommand}"
-                                            IsVisible="{Binding !Timeline.AreMapsReady}" IsEnabled="{Binding !Timeline.IsMapToolsBusy}" />
-                                    <Button Content="Удалить инструменты карт" Command="{Binding RemoveMapToolsCommand}"
-                                            IsVisible="{Binding HasMapTools}"
-                                            ToolTip.Tip="Удалить кеш, исходники, нарезку карт и скачанные инструменты" />
-                                </StackPanel>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
                 </Grid>
                 <StackPanel Orientation="Horizontal" Spacing="12" IsVisible="{Binding !Timeline.AreMapsReady}" IsEnabled="{Binding !IsRemovingMapTools}">
                     <Button Content="Включить и скачать" Command="{Binding EnableMapToolsCommand}"

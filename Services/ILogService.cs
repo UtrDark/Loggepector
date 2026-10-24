@@ -12,7 +12,10 @@ public interface ILogService
     TimeSpan Duration { get; }
     DateTime StartTime { get; }
     string? MapName { get; }
+    string? RoundEndHtml { get; }
     Task LoadAsync(string path, CancellationToken cancellationToken = default, IProgress<int>? progress = null);
+    Task LoadBigAsync(string path, Func<MapDownloadStage, CancellationToken, Task<bool>> confirmDownload,
+        CancellationToken cancellationToken = default, IProgress<int>? progress = null);
     IReadOnlyList<string> GetTypes();
     IReadOnlyList<string> GetCKeys();
     IReadOnlyDictionary<string, IReadOnlyList<PlayerJoin>> GetPlayerJoins();

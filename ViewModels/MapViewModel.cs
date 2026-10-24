@@ -39,10 +39,13 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
             var matchingMap = Timeline.MapName is { } logMap && NormalizeMapName(MapName) == NormalizeMapName(logMap);
             var lavaland = NormalizeMapName(MapName) == NormalizeMapName(AdditionalMaps.LavalandName);
             var planetaryPort = NormalizeMapName(MapName) == NormalizeMapName(AdditionalMaps.PlanetaryPortName);
+            var start = Timeline.RoundStartTime.AddSeconds(Timeline.FromSecond);
+            var end = Timeline.RoundStartTime.AddSeconds(Timeline.ToSecond);
+            var lavalandZ = await Timeline.GetLavalandZAsync(_lifetime);
             var index = await Task.Run(() => new MapLogIndex(entries.Where(entry =>
                 planetaryPort ? AdditionalMaps.IsPlanetaryPort(entry) :
-                lavaland ? AdditionalMaps.IsLavaland(entry) :
-                matchingMap && !AdditionalMaps.IsLavaland(entry) && !AdditionalMaps.IsPlanetaryPort(entry)).ToArray()));
+                lavaland ? AdditionalMaps.IsLavaland(entry, lavalandZ) :
+                matchingMap && !AdditionalMaps.IsLavaland(entry, lavalandZ) && !AdditionalMaps.IsPlanetaryPort(entry)).ToArray(), start, end));
             if (revision != _logRevision)
                 return;
             LogIndex = index;
@@ -282,9 +285,7 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
                 var loaded = await mapViewService.LoadAsync(selectedMap, cancellation.Token);
                 if (NormalizeMapName(selectedMap) == NormalizeMapName(AdditionalMaps.LavalandName))
                 {
-                    var worldLayer = Timeline.MapName is { Length: > 0 } station
-                        ? await mapViewService.GetStationLayerCountAsync(station, cancellation.Token) + 2
-                        : loaded.DefaultLayer;
+                    var worldLayer = await Timeline.GetLavalandZAsync(cancellation.Token) ?? loaded.DefaultLayer;
                     loaded = loaded with { WorldZOffset = worldLayer - loaded.DefaultLayer };
                 }
                 return loaded;

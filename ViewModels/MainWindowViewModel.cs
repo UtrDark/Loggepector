@@ -163,8 +163,25 @@ public partial class MainWindowViewModel : ViewModelBase
     }
 
     private readonly ILogService _logService;
+    private readonly IRoundEndStyleService _roundEndStyle;
+
+    public Task<string?> LoadRoundEndStyleAsync(CancellationToken cancellationToken) =>
+        _roundEndStyle.LoadAsync(MapRepositoryUrl, ConfirmMapDownloadAsync
+            ?? throw new InvalidOperationException("Не подключено подтверждение загрузки оформления."), cancellationToken);
     private readonly IMapPreparationService _mapPreparation;
     private readonly IMapViewService _mapViewService;
+    public async Task<int?> GetLavalandZAsync(CancellationToken cancellationToken = default) =>
+        MapName is { Length: > 0 } station
+            ? await _mapViewService.GetStationLayerCountAsync(station, cancellationToken) + 2
+            : null;
+
+    public async Task<string?> GetLogMapNameAsync(ILogEntry entry, CancellationToken cancellationToken = default)
+    {
+        if (AdditionalMaps.IsPlanetaryPort(entry))
+            return AdditionalMaps.PlanetaryPortName;
+        return AdditionalMaps.IsLavaland(entry, await GetLavalandZAsync(cancellationToken))
+            ? AdditionalMaps.LavalandName : MapName;
+    }
     private CancellationTokenSource? _mapToolsCancellation;
     private Task _mapPreparationTask = Task.CompletedTask;
     private bool _mapToolsDeleted;
@@ -284,8 +301,10 @@ public partial class MainWindowViewModel : ViewModelBase
     public string TimeLabel => $"От {TimeSpan.FromSeconds(FromSecond):c} до {TimeSpan.FromSeconds(ToSecond):c} · Всего {TimeSpan.FromSeconds(MaximumSecond):c}";
     public string CountLabel => $"Показано: {Logs.Count:N0} · Всего: {TotalCount:N0}";
 
-    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService, IThemeService themeService, ILogisService logisService)
+    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService, IThemeService themeService, ILogisService logisService, IRoundEndStyleService roundEndStyle, IEmojiService emojiService)
     {
+        _emojiService = emojiService;
+        _roundEndStyle = roundEndStyle;
         _logisService = logisService;
         _themeService = themeService;
         IsDarkTheme = themeService.IsDark;
@@ -359,7 +378,7 @@ public partial class MainWindowViewModel : ViewModelBase
         try
         {
             await _mapPreparation.DeleteAllAsync(cancellationToken);
-            MapRepositoryUrl = new MapToolsSettings(null).RepositoryUrl;
+            await _mapPreparation.SaveChoiceAsync(false, MapRepositoryUrl, cancellationToken);
             MapToolsStatus = "Все данные карт удалены.";
         }
         finally
@@ -465,8 +484,21 @@ public partial class MainWindowViewModel : ViewModelBase
         IsCapturingContext = false;
     }
 
-    public async Task LoadAsync(string path)
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasRoundEnd))]
+    private string? _roundEndHtml;
+
+    public bool HasRoundEnd => RoundEndHtml is not null;
+
+    private CancellationTokenSource? _loadCancellation;
+
+    [RelayCommand]
+    private void CancelLoad() => _loadCancellation?.Cancel();
+
+    public async Task LoadAsync(string path, bool bigLog = false)
     {
+        using var cancellation = new CancellationTokenSource();
+        _loadCancellation = cancellation;
         IsLoading = true;
         ResetContext();
         SelectedLogs.Clear();
@@ -480,10 +512,18 @@ public partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            await _logService.LoadAsync(path, progress: progress);
+            if (bigLog)
+            {
+                var confirm = ConfirmMapDownloadAsync
+                    ?? throw new InvalidOperationException("Не подключено подтверждение загрузки архиватора.");
+                await _logService.LoadBigAsync(path, confirm, cancellation.Token, progress);
+            }
+            else
+                await _logService.LoadAsync(path, cancellation.Token, progress);
             FileName = Path.GetFileName(path);
             TotalCount = _logService.Count;
             MapName = _logService.MapName;
+            RoundEndHtml = _logService.RoundEndHtml;
             HasLogs = TotalCount > 0;
             LogTypes = _logService.GetTypes().Select(type => new LogTypeViewModel(type, UpdateLogs)).ToArray();
             Players = _logService.GetCKeys().Select(key => new PlayerViewModel(key, OnPlayerSelectionChanged)).ToArray();
@@ -494,6 +534,11 @@ public partial class MainWindowViewModel : ViewModelBase
             ToSecond = MaximumSecond;
             UpdateLogs();
             LoadProgress = 100;
+            await PrepareEmojiAsync(cancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            ErrorMessage = "Загрузка отменена.";
         }
         catch (Exception exception)
         {
@@ -501,6 +546,7 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         finally
         {
+            _loadCancellation = null;
             IsLoading = false;
         }
     }
