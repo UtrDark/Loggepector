@@ -19,6 +19,10 @@ public static class LogEntryParser
         @"^.+?/\(.*?\)(?: \(mob_\d+\))? \((?:station announcement from\b|priority announcement\b)",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex SystemRadioChannel = new(
+        @"^(?<speaker>.+?) \[(?<channel>\d{3}\.\d)\](?<message>.*)$",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+
     public static ILogEntry? Parse(string text, int lineNumber)
     {
         var match = Header.Match(text);
@@ -32,6 +36,8 @@ public static class LogEntryParser
         if (type is "SAY" or "RADIO" or "MISC")
         {
             var channelMatch = Channel.Match(message);
+            if (!channelMatch.Success && type == "RADIO")
+                channelMatch = SystemRadioChannel.Match(message);
             if (channelMatch.Success)
             {
                 channel = channelMatch.Groups["channel"].Value;

@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private readonly CancellationTokenSource _mapPreparationCancellation = new();
     private MapViewWindow? _mapWindow;
     private bool _isCopyingLogs;
+    private NativeWebDialog? _roundEndBrowser;
     private readonly List<PlayersInfoWindow> _playerWindows = new();
 
     public MainWindow()
@@ -34,12 +35,14 @@ public partial class MainWindow : Window
         Opened += InitializeMapTools;
         Closed += (_, _) =>
         {
+            _roundEndBrowser?.Close();
             _mapWindow?.Close();
             foreach (var window in _playerWindows.ToArray())
                 window.Close();
             _mapPreparationCancellation.Cancel();
             var viewModel = (MainWindowViewModel)DataContext!;
             viewModel.EnableMapToolsCommand.Cancel();
+            viewModel.CancelLoadCommand.Execute(null);
         };
     }
 
@@ -237,25 +240,31 @@ public partial class MainWindow : Window
         return window;
     }
 
-    private void ShowLogOnMap(object? sender, RoutedEventArgs e)
+    private async void ShowLogOnMap(object? sender, RoutedEventArgs e)
     {
         var viewModel = (MainWindowViewModel)DataContext!;
         var entry = (LogEntryViewModel)((Button)sender!).DataContext!;
-        var mapName = AdditionalMaps.IsPlanetaryPort(entry.Entry) ? AdditionalMaps.PlanetaryPortName :
-            AdditionalMaps.IsLavaland(entry.Entry) ? AdditionalMaps.LavalandName : viewModel.MapName;
-        if (!viewModel.CanOpenMap || string.IsNullOrWhiteSpace(mapName))
+        try
         {
-            viewModel.ErrorMessage = "В логе не найдена карта станции или ещё идёт загрузка.";
-            return;
+            var mapName = await viewModel.GetLogMapNameAsync(entry.Entry, _mapPreparationCancellation.Token);
+            if (!viewModel.CanOpenMap || string.IsNullOrWhiteSpace(mapName))
+            {
+                viewModel.ErrorMessage = "В логе не найдена карта станции или ещё идёт загрузка.";
+                return;
+            }
+            var coordinates = entry.Entry.GetCoordinates()
+                ?? throw new InvalidOperationException("У записи отсутствуют координаты.");
+            var window = GetMapWindow();
+            var mapModel = (MapViewModel)window.DataContext!;
+            mapModel.MapName = mapName;
+            mapModel.FocusLocation = new MapLocation(coordinates.X, coordinates.Y, coordinates.Z);
+            window.Activate();
+            e.Handled = true;
         }
-        var coordinates = entry.Entry.GetCoordinates()
-            ?? throw new InvalidOperationException("У записи отсутствуют координаты.");
-        var window = GetMapWindow();
-        var mapModel = (MapViewModel)window.DataContext!;
-        mapModel.MapName = mapName;
-        mapModel.FocusLocation = new MapLocation(coordinates.X, coordinates.Y, coordinates.Z);
-        window.Activate();
-        e.Handled = true;
+        catch (Exception exception)
+        {
+            viewModel.ErrorMessage = $"Не удалось открыть запись на карте: {exception.Message}";
+        }
     }
 
     private void OpenPlayersInfo(object? sender, RoutedEventArgs e)
@@ -265,6 +274,103 @@ public partial class MainWindow : Window
         _playerWindows.Add(window);
         window.Closed += (_, _) => _playerWindows.Remove(window);
         window.Show();
+    }
+
+    private void RefreshResources(object? sender, RoutedEventArgs e) => ((MainWindowViewModel)DataContext!).RefreshResources();
+
+    private async void DeleteMapResources(object? sender, RoutedEventArgs e)
+    {
+        var model = (MainWindowViewModel)DataContext!;
+        try
+        {
+            if (_mapWindow?.DataContext is MapViewModel map)
+                await map.RemoveMapToolsCommand.ExecuteAsync(null);
+            else
+                await model.RemoveMapToolsAsync(_mapPreparationCancellation.Token);
+            model.RefreshResources();
+        }
+        catch (Exception exception) { model.ErrorMessage = exception.Message; }
+    }
+
+    private async void OpenRoundEnd(object? sender, RoutedEventArgs e)
+    {
+        var model = (MainWindowViewModel)DataContext!;
+        try
+        {
+            var html = model.RoundEndHtml ?? throw new InvalidOperationException("В загруженном логе нет roundend.");
+            var css = await model.LoadRoundEndStyleAsync(_mapPreparationCancellation.Token);
+            if (css is null)
+                return;
+            html = "<!DOCTYPE html><html><head><meta charset='utf-8'><style>" + css +
+                "</style></head><body>" + html + "</body></html>";
+            _roundEndBrowser?.Close();
+            var browser = new NativeWebDialog { Title = "Roundend — " + model.FileName, CanUserResize = true };
+            _roundEndBrowser = browser;
+            browser.Resize(1100, 800);
+            browser.NavigationCompleted += (_, args) =>
+            {
+                if (!args.IsSuccess)
+                    model.ErrorMessage = "Не удалось отобразить roundend в WebView.";
+            };
+            browser.Closing += (_, _) => Dispatcher.UIThread.Post(() =>
+            {
+                if (ReferenceEquals(_roundEndBrowser, browser))
+                    _roundEndBrowser = null;
+                browser.Dispose();
+            });
+            browser.Show();
+            browser.NavigateToString(html, new Uri("about:blank"));
+        }
+        catch (Exception exception)
+        {
+            _roundEndBrowser?.Close();
+            model.ErrorMessage = $"Не удалось открыть roundend: {exception.Message}";
+        }
+    }
+
+    private async void OpenBigLogFolder(object? sender, RoutedEventArgs e)
+    {
+        BigLogButton.Flyout?.Hide();
+        var model = (MainWindowViewModel)DataContext!;
+        try
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = "Выберите папку раунда", AllowMultiple = false
+            });
+            if (folders.Count == 0)
+                return;
+            using var folder = folders[0];
+            var path = folder.TryGetLocalPath() ?? throw new NotSupportedException("Выберите локальную папку.");
+            await model.LoadAsync(path, bigLog: true);
+        }
+        catch (Exception exception)
+        {
+            model.ErrorMessage = exception.Message;
+        }
+    }
+
+    private async void OpenBigLogArchive(object? sender, RoutedEventArgs e)
+    {
+        BigLogButton.Flyout?.Hide();
+        var model = (MainWindowViewModel)DataContext!;
+        try
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Выберите архив раунда", AllowMultiple = false,
+                FileTypeFilter = new[] { new FilePickerFileType("Архив 7-Zip") { Patterns = new[] { "*.7z" } } }
+            });
+            if (files.Count == 0)
+                return;
+            using var file = files[0];
+            var path = file.TryGetLocalPath() ?? throw new NotSupportedException("Выберите локальный архив.");
+            await model.LoadAsync(path, bigLog: true);
+        }
+        catch (Exception exception)
+        {
+            model.ErrorMessage = exception.Message;
+        }
     }
 
     private async void OpenLogFile(object? sender, RoutedEventArgs e)

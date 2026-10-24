@@ -27,8 +27,6 @@ public partial class MapViewWindow : Window
         };
     }
 
-    private void RefreshMapToolsState(object? sender, RoutedEventArgs e) =>
-        ((MapViewModel)DataContext!).RefreshMapToolsState();
 
     private async void LoadMap(object? sender, EventArgs e)
     {

@@ -16,7 +16,7 @@ public sealed class MapLogIndex
     private static readonly Regex Actor = new(@"(?<key>\*no key\*|[^\s/]+)/\((?<name>[^)]+)\)", RegexOptions.Compiled);
     private readonly Dictionary<(int Z, int X, int Y), MapLogPoint[]> _buckets;
 
-    public MapLogIndex(IReadOnlyList<ILogEntry> entries)
+    public MapLogIndex(IReadOnlyList<ILogEntry> entries, DateTime start, DateTime end)
     {
         var points = entries.Select(entry => (Entry: entry, Point: entry.GetCoordinates()))
             .Where(item => item.Point.HasValue).GroupBy(item => item.Point!.Value)
@@ -35,12 +35,10 @@ public sealed class MapLogIndex
             }).ToArray();
         if (points.Length > 0)
         {
-            var start = points.Min(point => point.Entries[^1].Timestamp);
-            var end = points.Max(point => point.Entries[^1].Timestamp);
             var duration = (end - start).TotalSeconds;
             points = points.Select(point => point with
             {
-                Progress = duration == 0 ? 1 : (point.Entries[^1].Timestamp - start).TotalSeconds / duration
+                Progress = duration <= 0 ? 1 : Math.Clamp((point.Entries[^1].Timestamp - start).TotalSeconds / duration, 0, 1)
             }).ToArray();
         }
         _buckets = points.GroupBy(point => (point.Z, point.X / 16, point.Y / 16))

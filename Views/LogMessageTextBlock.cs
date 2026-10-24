@@ -9,6 +9,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Input;
 using Loggepector.Models;
+using Loggepector.Services;
 
 namespace Loggepector.Views;
 
@@ -29,6 +30,19 @@ public sealed class LogMessageTextBlock : SelectableTextBlock
     }
 
     public bool AllowTextSelection { get; set; } = true;
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        EmojiService.ImagesChanged += RebuildInlines;
+        RebuildInlines();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        EmojiService.ImagesChanged -= RebuildInlines;
+        base.OnDetachedFromVisualTree(e);
+    }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
@@ -109,6 +123,19 @@ public sealed class LogMessageTextBlock : SelectableTextBlock
         var offset = 0;
         foreach (var part in Parts)
         {
+            if (part.Kind == LogMessagePartKind.Emoji)
+            {
+                if (part.Channel is { } name && EmojiService.Images.TryGetValue(name, out var image))
+                {
+                    var control = new Image { Source = image, Width = 16, Height = 16 };
+                    ToolTip.SetTip(control, ":" + name + ":");
+                    Inlines.Add(new InlineUIContainer { BaselineAlignment = BaselineAlignment.Center, Child = control });
+                }
+                else
+                    AddHighlightedRuns(Inlines, part.Text, offset, ranges);
+                offset += part.Text.Length;
+                continue;
+            }
             if (part.Kind == LogMessagePartKind.Text)
             {
                 AddHighlightedRuns(Inlines, part.Text, offset, ranges);

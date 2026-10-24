@@ -9,6 +9,12 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="Loggepector">
     <Window.Styles>
+        <Style Selector="FlyoutPresenter.resources">
+            <Setter Property="MaxWidth" Value="440" />
+        </Style>
+        <Style Selector="FlyoutPresenter.resources /template/ ScrollViewer">
+            <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+        </Style>
         <Style Selector="FlyoutPresenter.rawLog">
             <Setter Property="MaxWidth" Value="680" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
@@ -18,19 +24,46 @@
         </Style>
     </Window.Styles>
     <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
-        <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,6">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="0,0,0,6">
             <Button Content="Открыть .log" Click="OpenLogFile" IsEnabled="{Binding CanOpenFile}" />
-            <TextBlock Grid.Column="1" Text="{Binding FileName}" Margin="16,0,0,0"
+            <Button Grid.Column="1" x:Name="BigLogButton" Content="Open big log" IsEnabled="{Binding CanOpenFile}" Margin="8,0,0,0">
+                <Button.Flyout>
+                    <Flyout>
+                        <StackPanel Spacing="6">
+                            <Button Content="Папка раунда…" Click="OpenBigLogFolder" />
+                            <Button Content="Архив .7z…" Click="OpenBigLogArchive" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+            <Button Grid.Column="2" Content="Выбрать репу ▾" Click="RefreshResources" Margin="8,0,0,0" IsEnabled="{Binding CanOpenFile}">
+                <Button.Flyout>
+                    <Flyout FlyoutPresenterClasses="resources">
+                        <StackPanel Width="400" Spacing="8" IsEnabled="{Binding !IsResourcesBusy}">
+                            <TextBlock Text="Репозиторий станции" />
+                            <TextBox Text="{Binding MapRepositoryUrl}" Watermark="https://github.com/owner/repository" />
+                            <Button Content="Сохранить" Command="{Binding SaveRepositoryCommand}" />
+                            <Button Content="Удалить инструменты карт" Click="DeleteMapResources" IsVisible="{Binding HasMapResources}" IsEnabled="{Binding !IsMapToolsBusy}" />
+                            <Button Content="Удалить CSS Roundend" Command="{Binding DeleteRoundEndResourcesCommand}" IsVisible="{Binding HasRoundEndResources}" />
+                            <Button Content="Удалить смайлики" Command="{Binding DeleteEmojiResourcesCommand}" IsVisible="{Binding HasEmojiResources}" />
+                        </StackPanel>
+                    </Flyout>
+                </Button.Flyout>
+            </Button>
+            <TextBlock Grid.Column="3" Text="{Binding FileName}" Margin="16,0,0,0"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <Button Grid.Column="2" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}"
+            <Button Grid.Column="4" Content="Roundend" Click="OpenRoundEnd" IsVisible="{Binding HasRoundEnd}"
+                    IsEnabled="{Binding CanOpenFile}" Margin="8,0,0,0" />
+            <Button Grid.Column="5" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}"
                     Width="34" Height="32" Padding="0" FontSize="20" HorizontalContentAlignment="Center"
                     ToolTip.Tip="Сменить тему" Margin="12,0,0,0" />
         </Grid>
 
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" IsVisible="{Binding IsLoading}" Margin="0,0,0,12">
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" IsVisible="{Binding IsLoading}" Margin="0,0,0,12">
             <ProgressBar Minimum="0" Maximum="100" Value="{Binding LoadProgress}" Height="6"
                          VerticalAlignment="Center" />
             <TextBlock Grid.Column="1" Text="{Binding LoadProgress, StringFormat='{}{0}%'}" Margin="12,0,0,0" />
+            <Button Grid.Column="2" Content="Отмена" Command="{Binding CancelLoadCommand}" Margin="12,0,0,0" />
         </Grid>
 
         <TextBlock Grid.Row="2" Text="{Binding ErrorMessage}" Foreground="IndianRed" IsVisible="{Binding HasErrorMessage}"

@@ -39,6 +39,9 @@ public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart, boo
     private bool _showArea = showArea;
 
     partial void OnShowAreaChanged(bool value)
+        => RefreshMessageParts();
+
+    public void RefreshMessageParts()
     {
         _messageParts = null;
         OnPropertyChanged(nameof(MessageParts));
