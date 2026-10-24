@@ -18,6 +18,7 @@ internal static class LogMessageHighlights
 
     public static IReadOnlyList<LogMessagePart> Create(ILogEntry entry, string message, bool showArea = false)
     {
+        message = EmojiMarkup.Replace(message);
         var locations = Area.Matches(message).Cast<Match>().ToArray();
         var inlineAreas = entry is ExplosionLogEntry || locations.Length > 1 || message.Contains("has teleported from", StringComparison.OrdinalIgnoreCase);
         static string AreaName(Match match) => match.Groups["area"].Value.Replace("\r", string.Empty).Replace("\n", string.Empty).Trim();
@@ -56,6 +57,9 @@ internal static class LogMessageHighlights
         }
         if (recipient.Success && recipient.Groups["name"].Value.Length > 0)
             identities[recipient.Groups["name"].Value] = LogMessagePartKind.CharacterName;
+        if (entry is AdminPrivateLogEntry ticket)
+            foreach (var highlight in ticket.Highlights)
+                identities[highlight.Key] = highlight.Value;
         if (entry is AttackLogEntry attack)
             foreach (var highlight in attack.Highlights)
                 if (highlight.Key.Length > 0 && (highlight.Value != LogMessagePartKind.Area || showArea))
@@ -93,7 +97,26 @@ internal static class LogMessageHighlights
                 parts.Add(new LogMessagePart(area.Groups["area"].Value.Trim(), LogMessagePartKind.Area));
             }
         }
-        return parts;
+        var result = new List<LogMessagePart>();
+        foreach (var part in parts)
+        {
+            if (part.Kind != LogMessagePartKind.Text)
+            {
+                result.Add(part);
+                continue;
+            }
+            var offset = 0;
+            foreach (Match emoji in EmojiMarkup.Token.Matches(part.Text))
+            {
+                if (emoji.Index > offset)
+                    result.Add(new LogMessagePart(part.Text[offset..emoji.Index], LogMessagePartKind.Text));
+                result.Add(new LogMessagePart(emoji.Value, LogMessagePartKind.Emoji, emoji.Groups["name"].Value));
+                offset = emoji.Index + emoji.Length;
+            }
+            if (offset < part.Text.Length)
+                result.Add(new LogMessagePart(part.Text[offset..], LogMessagePartKind.Text));
+        }
+        return result;
     }
 
     private static IReadOnlyList<LogMessagePart> AddChannel(List<LogMessagePart> parts, string? channel)

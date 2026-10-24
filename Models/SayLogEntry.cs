@@ -5,7 +5,7 @@ namespace Loggepector.Models;
 public record SayLogEntry : LogEntry
 {
     private static readonly Regex Speech = new(
-        """^(?<key>.+?)/\((?<name>.*?)\)(?: \(mob_\d+\))?:? (?:\(spans:[^\r\n]*?\) )?"(?<speech>.*)"(?<suffix>.*)$""",
+        """^(?<key>.+?)/\((?<name>.*?)\)(?: \(mob_\d+\))?:? (?:\(LOOC\) )?(?:\(spans:[^\r\n]*?\) )?"(?<speech>.*)"(?<suffix>.*)$""",
         RegexOptions.Compiled | RegexOptions.Singleline);
 
     private readonly Match _speech;
