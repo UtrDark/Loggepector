@@ -42,6 +42,8 @@ public static class LogEntryParser
             }
         }
         var message = text[start..];
+        if (type == "GAME" && message.Contains(" has attempted to say forbidden word.", StringComparison.OrdinalIgnoreCase))
+            type = "FORBIDDEN";
         string? channel = null;
         if ((type is "SAY" or "RADIO" or "MISC") && message.Contains(" [", StringComparison.Ordinal))
         {

@@ -97,6 +97,7 @@ public static class LogDisplayConfig
             ["ATTACK"] = CreateStyle("#CD6464"),
             ["ADMIN"] = CreateStyle("#B85B9D"),
             ["TICKETS"] = CreateStyle("#D2AB62"),
+            ["FORBIDDEN"] = CreateStyle("#E08036"),
             ["EMOTE"] = CreateStyle("#459C9C")
         };
 
