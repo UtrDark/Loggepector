@@ -68,7 +68,16 @@
 
         <TextBlock Grid.Row="2" Text="{Binding ErrorMessage}" Foreground="IndianRed" IsVisible="{Binding HasErrorMessage}"
                    TextWrapping="Wrap" Margin="0,0,0,8" />
-        <TextBlock Grid.Row="3" Text="{Binding TimeLabel}" />
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding TimeLabel}" />
+            <Button Grid.Column="1" Click="OpenUpdateRelease" IsVisible="{Binding HasUpdate}"
+                    Background="Transparent" BorderThickness="0" Padding="0" VerticalAlignment="Center"
+                    ToolTip.Tip="{Binding UpdateCheckStatus}">
+                <TextBlock Text="Доступно обновление" Foreground="{Binding UpdateNoticeColor}" FontSize="11" TextDecorations="Underline" />
+            </Button>
+            <TextBlock Grid.Column="1" Text="Не удалось проверить обновления" FontSize="11" Opacity="0.65"
+                       VerticalAlignment="Center" IsVisible="{Binding UpdateCheckFailed}" ToolTip.Tip="{Binding UpdateCheckStatus}" />
+        </Grid>
         <Grid Grid.Row="4" ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,6">
             <Button Content="↺" Command="{Binding ResetTimeSliceCommand}" Padding="6,0"
                     ToolTip.Tip="Весь лог" IsEnabled="{Binding CanSelectTime}" />

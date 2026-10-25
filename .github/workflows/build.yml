@@ -106,6 +106,21 @@ jobs:
           dotnet publish Loggepector.csproj -c Release -r ${{ matrix.rid }} --self-contained true -p:PublishProfile=${{ matrix.profile }} -o "artifacts/${{ matrix.rid }}/${{ matrix.mode }}"
           if ($LASTEXITCODE -ne 0) { throw "Publish failed." }
 
+      - name: Write build metadata
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          $commit = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw "Cannot resolve the checked-out commit." }
+          $metadata = [ordered]@{
+            repository = "https://github.com/$env:GITHUB_REPOSITORY"
+            commit = $commit.Trim()
+            tag = $env:RELEASE_TAG
+          } | ConvertTo-Json
+          $output = Join-Path $PWD "artifacts/${{ matrix.rid }}/${{ matrix.mode }}/build-info.json"
+          [System.IO.File]::WriteAllText($output, $metadata, [System.Text.UTF8Encoding]::new($false))
+
       - name: Package Windows ZIP
         if: runner.os == 'Windows'
         shell: pwsh

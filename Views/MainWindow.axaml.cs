@@ -33,6 +33,7 @@ public partial class MainWindow : Window
         AddHandler(KeyDownEvent, HandleSearchKeys, RoutingStrategies.Tunnel);
         Opened += InitializeFind;
         Opened += InitializeMapTools;
+        Opened += CheckForUpdates;
         Closed += (_, _) =>
         {
             _roundEndBrowser?.Close();
@@ -44,6 +45,24 @@ public partial class MainWindow : Window
             viewModel.EnableMapToolsCommand.Cancel();
             viewModel.CancelLoadCommand.Execute(null);
         };
+    }
+
+    private async void CheckForUpdates(object? sender, EventArgs e)
+    {
+        Opened -= CheckForUpdates;
+        await ((MainWindowViewModel)DataContext!).CheckForUpdateAsync(_mapPreparationCancellation.Token);
+    }
+
+    private async void OpenUpdateRelease(object? sender, RoutedEventArgs e)
+    {
+        var model = (MainWindowViewModel)DataContext!;
+        try
+        {
+            var address = model.AvailableUpdate ?? throw new InvalidOperationException("Не задан адрес релиза.");
+            if (!await Launcher.LaunchUriAsync(address))
+                model.ErrorMessage = "Не удалось открыть страницу обновления в браузере.";
+        }
+        catch (Exception exception) { model.ErrorMessage = exception.Message; }
     }
 
     private void InitializeFind(object? sender, EventArgs e)
