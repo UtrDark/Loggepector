@@ -50,7 +50,21 @@ public partial class MainWindow : Window
     private async void CheckForUpdates(object? sender, EventArgs e)
     {
         Opened -= CheckForUpdates;
-        await ((MainWindowViewModel)DataContext!).CheckForUpdateAsync(_mapPreparationCancellation.Token);
+        await ((MainWindowViewModel)DataContext!).CheckForUpdateAsync(RequestUpdateConsentAsync, _mapPreparationCancellation.Token);
+    }
+
+    private async Task<bool?> RequestUpdateConsentAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var result = await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var window = new UpdateConsentWindow();
+            var decision = window.ShowDialog<bool?>(this);
+            var registration = cancellationToken.Register(() => Dispatcher.UIThread.Post(() => window.Close()));
+            window.Closed += (_, _) => registration.Dispose();
+            return decision;
+        });
+        return result;
     }
 
     private async void OpenUpdateRelease(object? sender, RoutedEventArgs e)
@@ -298,53 +312,6 @@ public partial class MainWindow : Window
         _playerWindows.Add(window);
         window.Closed += (_, _) => _playerWindows.Remove(window);
         window.Show();
-    }
-
-    private async void ConnectLogis(object? sender, RoutedEventArgs e)
-    {
-        var model = (MainWindowViewModel)DataContext!;
-        var loginAttempted = false;
-        try
-        {
-            model.RestoreLogisSession();
-            var requiresLogin = !model.HasLogisSession;
-            while (true)
-            {
-                if (requiresLogin)
-                {
-                    var login = new LogisWindow { DataContext = model.CreateLogisConnection() };
-                    if (!await login.ShowDialog<bool>(this))
-                        return;
-                    model.RefreshLogisSession();
-                    loginAttempted = true;
-                }
-                var browserModel = model.CreateLogisBrowser(!loginAttempted);
-                var browser = new LogisBrowserWindow { DataContext = browserModel };
-                await browser.ShowDialog<bool>(this);
-                if (browserModel.RequiresLogin)
-                {
-                    requiresLogin = true;
-                    continue;
-                }
-                if (browserModel.DownloadedPath is not { } path)
-                    return;
-                try
-                {
-                    await model.LoadAsync(path);
-                    if (model.ErrorMessage is null)
-                        model.FileName = browserModel.LogLabel;
-                }
-                finally
-                {
-                    File.Delete(path);
-                }
-                return;
-            }
-        }
-        catch (Exception exception)
-        {
-            model.ErrorMessage = $"Не удалось открыть лог из Logis: {exception.Message}";
-        }
     }
 
     private void RefreshResources(object? sender, RoutedEventArgs e) => ((MainWindowViewModel)DataContext!).RefreshResources();

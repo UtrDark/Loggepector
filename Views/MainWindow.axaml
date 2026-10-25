@@ -28,7 +28,7 @@
         </Style>
     </Window.Styles>
     <Grid Margin="20" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*,Auto">
-        <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" Margin="0,0,0,6">
+        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="0,0,0,6">
             <Button Content="Открыть .log" Click="OpenLogFile" IsEnabled="{Binding CanOpenFile}" />
             <Button Grid.Column="1" x:Name="BigLogButton" Content="Open big log" IsEnabled="{Binding CanOpenFile}" Margin="8,0,0,0">
                 <Button.Flyout>
@@ -40,8 +40,7 @@
                     </Flyout>
                 </Button.Flyout>
             </Button>
-            <Button Grid.Column="2" Content="{Binding LogisButtonText}" Click="ConnectLogis" IsEnabled="{Binding CanOpenFile}" Margin="8,0,0,0" />
-            <Button Grid.Column="3" Content="Выбрать репу ▾" Click="RefreshResources" Margin="8,0,0,0" IsEnabled="{Binding CanOpenFile}">
+            <Button Grid.Column="2" Content="Выбрать репу ▾" Click="RefreshResources" Margin="8,0,0,0" IsEnabled="{Binding CanOpenFile}">
                 <Button.Flyout>
                     <Flyout FlyoutPresenterClasses="resources">
                         <StackPanel Width="400" Spacing="8" IsEnabled="{Binding !IsResourcesBusy}">
@@ -55,11 +54,11 @@
                     </Flyout>
                 </Button.Flyout>
             </Button>
-            <TextBlock Grid.Column="4" Text="{Binding FileName}" Margin="16,0,0,0"
+            <TextBlock Grid.Column="3" Text="{Binding FileName}" Margin="16,0,0,0"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-            <Button Grid.Column="5" Content="Roundend" Click="OpenRoundEnd" IsVisible="{Binding HasRoundEnd}"
+            <Button Grid.Column="4" Content="Roundend" Click="OpenRoundEnd" IsVisible="{Binding HasRoundEnd}"
                     IsEnabled="{Binding CanOpenFile}" Margin="8,0,0,0" />
-            <Button Grid.Column="6" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}"
+            <Button Grid.Column="5" Content="{Binding ThemeButtonText}" Command="{Binding ToggleThemeCommand}"
                     Width="34" Height="32" Padding="0" FontSize="20" HorizontalContentAlignment="Center"
                     ToolTip.Tip="Сменить тему" Margin="12,0,0,0" />
         </Grid>

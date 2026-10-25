@@ -122,33 +122,6 @@ public partial class MainWindowViewModel : ViewModelBase
 
     public bool HasContextStatus => !string.IsNullOrEmpty(ContextStatus);
 
-    private readonly ILogisService _logisService;
-    private LogisBrowserViewModel? _logisBrowser;
-    private Uri? _logisBrowserAddress;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(LogisButtonText))]
-    private bool _hasLogisSession;
-
-    public string LogisButtonText => HasLogisSession ? "Открыть из Logis" : "Подключить Logis";
-    public LogisViewModel CreateLogisConnection() => new(_logisService);
-    public LogisBrowserViewModel CreateLogisBrowser(bool allowAutomaticLogin)
-    {
-        if (_logisBrowser is null || _logisBrowserAddress != _logisService.ServerAddress)
-        {
-            _logisBrowser = new LogisBrowserViewModel(_logisService, allowAutomaticLogin);
-            _logisBrowserAddress = _logisService.ServerAddress;
-        }
-        _logisBrowser.PrepareOpen(allowAutomaticLogin);
-        return _logisBrowser;
-    }
-    public void RestoreLogisSession()
-    {
-        _logisService.RestoreSession();
-        RefreshLogisSession();
-    }
-    public void RefreshLogisSession() => HasLogisSession = _logisService.SessionId is not null;
-
     private readonly IThemeService _themeService;
 
     [ObservableProperty]
@@ -346,12 +319,11 @@ public partial class MainWindowViewModel : ViewModelBase
     public string TimeLabel => $"От {TimeSpan.FromSeconds(FromSecond):c} до {TimeSpan.FromSeconds(ToSecond):c} · Всего {TimeSpan.FromSeconds(MaximumSecond):c}";
     public string CountLabel => $"Показано: {Logs.Count:N0} · Всего: {TotalCount:N0}";
 
-    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService, IThemeService themeService, ILogisService logisService, IRoundEndStyleService roundEndStyle, IEmojiService emojiService, IUpdateService updateService)
+    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService, IThemeService themeService, IRoundEndStyleService roundEndStyle, IEmojiService emojiService, IUpdateService updateService)
     {
         _updateService = updateService;
         _emojiService = emojiService;
         _roundEndStyle = roundEndStyle;
-        _logisService = logisService;
         _themeService = themeService;
         IsDarkTheme = themeService.IsDark;
         _logService = logService;

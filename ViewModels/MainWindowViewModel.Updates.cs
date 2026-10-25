@@ -21,11 +21,11 @@ public partial class MainWindowViewModel
     public bool HasUpdate => AvailableUpdate is not null;
     public IBrush UpdateNoticeColor => Brush.Parse(IsDarkTheme ? "#E6C351" : "#806000");
 
-    public async Task CheckForUpdateAsync(CancellationToken cancellationToken)
+    public async Task CheckForUpdateAsync(Func<CancellationToken, Task<bool?>> requestConsent, CancellationToken cancellationToken)
     {
         try
         {
-            var update = await _updateService.CheckAsync(cancellationToken);
+            var update = await _updateService.CheckAsync(requestConsent, cancellationToken);
             AvailableUpdate = update.Url;
             UpdateCheckStatus = update.Description;
         }
