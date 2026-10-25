@@ -7,10 +7,6 @@ namespace Loggepector.Utils;
 
 public static class LogEntryParser
 {
-    private static readonly Regex Header = new(
-        @"^\[(?<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})\] (?:(?<type>[A-Z][A-Z0-9_ ]*): ?)?(?<message>.*)$",
-        RegexOptions.Compiled | RegexOptions.Singleline);
-
     private static readonly Regex Channel = new(
         @"^(?<speaker>.+? \(mob_\d+\)) \[(?<channel>[^\]\r\n]+)\](?<message>.*)$",
         RegexOptions.Compiled | RegexOptions.Singleline);
@@ -25,15 +21,29 @@ public static class LogEntryParser
 
     public static ILogEntry? Parse(string text, int lineNumber)
     {
-        var match = Header.Match(text);
-        if (!match.Success || !DateTime.TryParseExact(match.Groups["time"].Value,
+        if (text.Length < 26 || text[0] != '[' || text[24] != ']' || text[25] != ' ' ||
+            !DateTime.TryParseExact(text.AsSpan(1, 23),
                 "yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture, DateTimeStyles.None, out var timestamp))
             return null;
 
-        var message = match.Groups["message"].Value;
-        var type = match.Groups["type"].Value;
+        var start = 26;
+        var type = string.Empty;
+        if (text.Length > start && text[start] is >= 'A' and <= 'Z')
+        {
+            var end = start + 1;
+            while (end < text.Length && (text[end] is >= 'A' and <= 'Z' or >= '0' and <= '9' or '_' or ' '))
+                end++;
+            if (end < text.Length && text[end] == ':')
+            {
+                type = text[start..end];
+                start = end + 1;
+                if (start < text.Length && text[start] == ' ')
+                    start++;
+            }
+        }
+        var message = text[start..];
         string? channel = null;
-        if (type is "SAY" or "RADIO" or "MISC")
+        if ((type is "SAY" or "RADIO" or "MISC") && message.Contains(" [", StringComparison.Ordinal))
         {
             var channelMatch = Channel.Match(message);
             if (!channelMatch.Success && type == "RADIO")
@@ -47,7 +57,7 @@ public static class LogEntryParser
             }
         }
 
-        if (type == "SAY" && Announcement.IsMatch(message))
+        if (type == "SAY" && message.Contains("announcement", StringComparison.OrdinalIgnoreCase) && Announcement.IsMatch(message))
             type = "ANOUNCE";
 
         var entry = new LogEntry(timestamp, type, message, lineNumber, channel)

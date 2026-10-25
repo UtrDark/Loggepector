@@ -246,6 +246,11 @@ public partial class MainWindow : Window
         var entry = (LogEntryViewModel)((Button)sender!).DataContext!;
         try
         {
+            if (!viewModel.AreMapsReady)
+            {
+                viewModel.ErrorMessage = "Сначала скачайте инструменты карт: откройте MapView и нажмите «Включить и скачать».";
+                return;
+            }
             var mapName = await viewModel.GetLogMapNameAsync(entry.Entry, _mapPreparationCancellation.Token);
             if (!viewModel.CanOpenMap || string.IsNullOrWhiteSpace(mapName))
             {

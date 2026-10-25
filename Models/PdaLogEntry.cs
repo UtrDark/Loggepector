@@ -1,3 +1,4 @@
+using System;
 using System.Text.RegularExpressions;
 
 namespace Loggepector.Models;
@@ -17,6 +18,8 @@ public sealed record PdaLogEntry : LogEntry
 
     internal static LogEntry? TryCreate(LogEntry entry)
     {
+        if (!entry.Message.Contains("PDA:", StringComparison.Ordinal))
+            return null;
         var pda = Pda.Match(entry.Message);
         return pda.Success ? new PdaLogEntry(entry, pda) : null;
     }

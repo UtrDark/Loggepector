@@ -477,8 +477,11 @@ public partial class MainWindowViewModel : ViewModelBase
             UpdateLogs();
     }
 
+    private CancellationTokenSource? _contextCancellation;
+
     private void ResetContext()
     {
+        _contextCancellation?.Cancel();
         _contextRevision++;
         ContextStatus = string.Empty;
         IsCapturingContext = false;
@@ -580,7 +583,14 @@ public partial class MainWindowViewModel : ViewModelBase
 
     private async Task UpdateLogsAsync()
     {
+        _contextCancellation?.Cancel();
+        using var cancellation = new CancellationTokenSource();
+        _contextCancellation = cancellation;
+        var token = cancellation.Token;
         var revision = ++_contextRevision;
+        var searchText = SearchText;
+        var fuzzy = FuzzySearch;
+        var badges = SearchBadges.Select(badge => badge.Part).ToArray();
         var from = TimeSpan.FromSeconds(FromSecond);
         var to = TimeSpan.FromSeconds(ToSecond);
         var types = LogTypes.Where(type => type.IsSelected == true).Select(type => type.Type).ToArray();
@@ -596,16 +606,22 @@ public partial class MainWindowViewModel : ViewModelBase
         ErrorMessage = null;
         try
         {
-            IReadOnlyList<ILogEntry> filtered = _logService.GetLogs(from, to, types, players, SearchText,
-                    FuzzySearch, SearchBadges.Select(badge => badge.Part).ToArray())
-                .Where(entry => !excludedTypes.Contains(entry.Type)).ToArray();
-            IReadOnlyList<ILogEntry> entries = filtered;
-            if (capture)
+            await Task.Delay(100, token);
+            var result = await Task.Run(() =>
             {
-                var candidates = _logService.GetLogs(from, to);
-                entries = await Task.Run(() => LogNeighbors.Find(candidates, filtered,
-                    sameType, byCoordinates, count, radius));
-            }
+                var filtered = _logService.GetLogs(from, to, types, players, searchText, fuzzy, badges, token)
+                    .Where(entry => !excludedTypes.Contains(entry.Type)).ToArray();
+                IReadOnlyList<ILogEntry> captured = filtered;
+                if (capture)
+                {
+                    var candidates = _logService.GetLogs(from, to);
+                    captured = LogNeighbors.Find(candidates, filtered, sameType, byCoordinates, count, radius);
+                }
+                token.ThrowIfCancellationRequested();
+                return (Filtered: filtered, Entries: captured);
+            }, token);
+            IReadOnlyList<ILogEntry> filtered = result.Filtered;
+            IReadOnlyList<ILogEntry> entries = result.Entries;
             if (excludedTypes.Count > 0)
                 entries = entries.Where(entry => !excludedTypes.Contains(entry.Type)).ToArray();
             if (revision != _contextRevision)
@@ -626,6 +642,7 @@ public partial class MainWindowViewModel : ViewModelBase
                 ? $"По фильтрам: {filtered.Count}. Добавлено соседних: {entries.Count - filtered.Count}."
                 : string.Empty;
         }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         catch (Exception exception)
         {
             if (revision == _contextRevision)
@@ -633,6 +650,8 @@ public partial class MainWindowViewModel : ViewModelBase
         }
         finally
         {
+            if (ReferenceEquals(_contextCancellation, cancellation))
+                _contextCancellation = null;
             if (revision == _contextRevision)
                 IsCapturingContext = false;
         }

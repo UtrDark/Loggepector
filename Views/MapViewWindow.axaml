@@ -9,6 +9,12 @@
         Width="1200" Height="850" MinWidth="700" MinHeight="450"
         WindowStartupLocation="CenterScreen">
     <Window.Styles>
+        <Style Selector="Border.pointFindRow">
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.pointFindRow.pointFindCurrent">
+            <Setter Property="BorderBrush" Value="#EF7D24" />
+        </Style>
         <Style Selector="FlyoutPresenter.rawLog">
             <Setter Property="MaxWidth" Value="680" />
             <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
@@ -60,7 +66,7 @@
             </Border>
             <Border IsVisible="{Binding HasSelectedPoint}" HorizontalAlignment="Right" Margin="12"
                     Width="400" Background="{DynamicResource AppPanelBrush}" Padding="12" CornerRadius="6">
-                <Grid RowDefinitions="Auto,*">
+                <Grid RowDefinitions="Auto,Auto,*">
                     <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
                         <TextBlock Text="{Binding SelectedPoint.Name}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource AppTextBrush}" />
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" Margin="8,0,0,0"
@@ -73,15 +79,23 @@
                         </StackPanel>
                         <Button Grid.Column="2" Content="×" Command="{Binding ClosePointCommand}" Margin="8,0,0,0" />
                     </Grid>
-                    <ListBox Grid.Row="1" ItemsSource="{Binding PointEntries}"
+                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto,Auto" IsVisible="{Binding IsPointFindVisible}" Margin="0,0,0,8">
+                        <TextBox x:Name="PointFindBox" Text="{Binding PointFindText}" Watermark="Найти в точке…" MinWidth="80" />
+                        <TextBlock Grid.Column="1" Text="{Binding PointFindCounter}" VerticalAlignment="Center" Margin="6,0" />
+                        <Button Grid.Column="2" Content="↑" Command="{Binding PreviousPointFindCommand}" Padding="6,0" ToolTip.Tip="Предыдущее совпадение" />
+                        <Button Grid.Column="3" Content="↓" Command="{Binding NextPointFindCommand}" Padding="6,0" ToolTip.Tip="Следующее совпадение" />
+                        <Button Grid.Column="4" Content="×" Command="{Binding ClosePointFindCommand}" Padding="6,0" />
+                    </Grid>
+                    <ListBox x:Name="PointLogsList" Grid.Row="2" ItemsSource="{Binding PointEntries}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate x:DataType="vm:LogEntryViewModel">
+                                <Border BorderThickness="1" Classes="pointFindRow" Classes.pointFindCurrent="{Binding IsCurrentFindMatch}" Padding="2">
                                 <StackPanel Margin="0,2" Spacing="2">
                                     <Grid ColumnDefinitions="*,Auto,Auto">
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Text="{Binding TimeLabel}" />
-                                        <TextBlock Text="{Binding Entry.Type}" Foreground="{Binding TypeColor}" />
+                                        <views:LogMessageTextBlock Parts="{Binding TimeParts}" HighlightText="{Binding $parent[Window].((vm:MapViewModel)DataContext).ActivePointFindText}" />
+                                        <views:LogMessageTextBlock Parts="{Binding TypeParts}" Foreground="{Binding TypeColor}" HighlightText="{Binding $parent[Window].((vm:MapViewModel)DataContext).ActivePointFindText}" />
                                     </StackPanel>
                                     <Button Grid.Column="1" Content="◷" Padding="4,0" Margin="6,0,0,0"
                                             ToolTip.Tip="Показать выбранный диапазон времени вокруг записи"
@@ -100,8 +114,10 @@
                                     </Button>
                                     </Grid>
                                     <views:LogMessageTextBlock Parts="{Binding MessageParts}" TextWrapping="Wrap"
+                                        HighlightText="{Binding $parent[Window].((vm:MapViewModel)DataContext).ActivePointFindText}"
                                         BadgeSearchCommand="{Binding $parent[Window].((vm:MapViewModel)DataContext).Timeline.SearchBadgeCommand}" />
                                 </StackPanel>
+                                </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
