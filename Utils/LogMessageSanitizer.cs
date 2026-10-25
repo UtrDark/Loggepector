@@ -19,8 +19,13 @@ internal static class LogMessageSanitizer
 
     internal static Regex? CreateKeyPattern(IEnumerable<ILogEntry> entries)
     {
-        var keys = entries.SelectMany(entry => Key.Matches(entry.GetRawMessage()).Cast<Match>())
+        var keys = entries.Select(entry => entry.GetRawMessage())
+            .Where(raw => raw.Contains("/(", StringComparison.Ordinal) || raw.Contains("priv_msg=", StringComparison.OrdinalIgnoreCase) ||
+                raw.Contains("ckey", StringComparison.OrdinalIgnoreCase) || raw.Contains("Login:", StringComparison.OrdinalIgnoreCase) ||
+                raw.Contains("Logout:", StringComparison.OrdinalIgnoreCase) || raw.Contains('\\') || raw.Contains("(as ", StringComparison.Ordinal))
+            .SelectMany(raw => Key.Matches(raw).Cast<Match>())
             .Select(match => match.Groups["key"].Value)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .SelectMany(key => new[] { key, CKey.Normalize(key) })
             .Where(key => key.Length > 0)
             .Distinct(StringComparer.OrdinalIgnoreCase)

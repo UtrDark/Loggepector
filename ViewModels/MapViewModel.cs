@@ -34,6 +34,12 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
     public async Task UpdateLogsAsync(IReadOnlyList<ILogEntry> entries)
     {
         var revision = ++_logRevision;
+        if (!Timeline.AreMapsReady)
+        {
+            LogIndex = null;
+            ClosePoint();
+            return;
+        }
         try
         {
             var matchingMap = Timeline.MapName is { } logMap && NormalizeMapName(MapName) == NormalizeMapName(logMap);
@@ -83,6 +89,7 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
             entry.Relative = Timeline.Relative;
             entry.ShowArea = Timeline.ShowArea;
         }
+        RefreshPointFindMatches();
     }
 
     [ObservableProperty]
@@ -297,6 +304,7 @@ public sealed partial class MapViewModel(string mapName, IMapViewService mapView
             Document = document;
             Status = string.Empty;
             ApplyFocus();
+            await UpdateLogsAsync(Timeline.Logs.Select(log => log.Entry).ToArray());
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
         {

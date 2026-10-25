@@ -1,3 +1,4 @@
+using System;
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
@@ -18,7 +19,8 @@ internal sealed class TicketLogParser
     public ILogEntry? Parse(ILogEntry entry)
     {
         var source = (LogEntry)entry;
-        if (entry.Type == "MISC" && Create.Match(source.Message) is { Success: true } create)
+        if (entry.Type == "MISC" && source.Message.Contains("create_ticket", StringComparison.Ordinal) &&
+            Create.Match(source.Message) is { Success: true } create)
         {
             using var document = JsonDocument.Parse(create.Groups["json"].Value);
             var message = document.RootElement.GetProperty("message").GetString();

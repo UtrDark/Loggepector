@@ -83,7 +83,7 @@ public sealed class LogService(IPlayerJoinService playerJoinService, IBigLogServ
         GetLogs(from, to, types, Array.Empty<string>());
 
     public IReadOnlyList<ILogEntry> GetLogs(TimeSpan from, TimeSpan to, IReadOnlyList<string> types,
-        IReadOnlyList<string> ckeys, string searchText = "", bool fuzzy = false, IReadOnlyList<LogMessagePart>? badges = null)
+        IReadOnlyList<string> ckeys, string searchText = "", bool fuzzy = false, IReadOnlyList<LogMessagePart>? badges = null, CancellationToken cancellationToken = default)
     {
         var snapshot = Volatile.Read(ref _snapshot)!;
         ILogFilter[] filters =
@@ -94,57 +94,97 @@ public sealed class LogService(IPlayerJoinService playerJoinService, IBigLogServ
             new TextLogFilter(searchText, fuzzy, badges)
         ];
         IEnumerable<ILogEntry> entries = snapshot.Entries;
-        foreach (var filter in filters)
-            entries = filter.Apply(entries);
+        for (var index = 0; index < filters.Length; index++)
+        {
+            entries = filters[index].Apply(entries);
+            if (index == 0 && cancellationToken.CanBeCanceled)
+                entries = entries.Where(entry =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    return true;
+                });
+        }
         return entries.ToArray();
     }
 
     private static async Task<Snapshot> ParseAsync(string path, CancellationToken cancellationToken, IProgress<int>? progress)
     {
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
-            4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
         using var reader = new StreamReader(stream, new UTF8Encoding(false, true), true);
-        var entries = new List<ILogEntry>();
-        var text = new StringBuilder();
+        var blocks = new List<(string Text, int Line)>();
+        string? entryText = null;
+        StringBuilder? text = null;
         var entryStartLine = 0;
         var sourceLineNumber = 0;
         var fileLength = stream.Length;
         var garbageReportPending = false;
         var skipEntry = false;
+        var reportedProgress = -1;
         while (true)
         {
             var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             if (line is null || line.StartsWith('['))
             {
-                if (!skipEntry && entryStartLine != 0 && LogEntryParser.Parse(text.ToString(), entryStartLine) is { } entry)
-                {
-                    if (entries.Count > 0 && MergeRadio.Merge(entries[^1], entry) is { } merged)
-                        entries[^1] = merged;
-                    else
-                        entries.Add(entry);
-                }
-
+                if (!skipEntry && entryText is not null)
+                    blocks.Add((text?.ToString() ?? entryText, entryStartLine));
                 if (line is null)
                     break;
-
                 entryStartLine = sourceLineNumber + 1;
-                text.Clear();
+                entryText = line;
+                text = null;
                 skipEntry = garbageReportPending && DebugObjectStart.IsMatch(line);
                 garbageReportPending = GarbageShutdown.IsMatch(line);
             }
-
-            sourceLineNumber++;
-            if (entryStartLine != 0 && !skipEntry)
+            else if (entryText is not null && !skipEntry)
             {
-                if (text.Length > 0)
-                    text.Append('\n');
-
-                text.Append(line);
+                text ??= new StringBuilder(entryText);
+                text.Append('\n').Append(line);
             }
-
-            progress?.Report((int)Math.Floor(stream.Position * 90.0 / fileLength));
+            sourceLineNumber++;
+            var currentProgress = (int)(stream.Position * 25 / Math.Max(1, fileLength));
+            if (currentProgress != reportedProgress)
+            {
+                progress?.Report(currentProgress);
+                reportedProgress = currentProgress;
+            }
         }
+        var parsed = new ILogEntry?[blocks.Count];
+        var completed = 0;
+        var progressGate = new object();
+        Parallel.For(0, blocks.Count, new ParallelOptions
+        {
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = Math.Min(Environment.ProcessorCount, 4)
+        }, index =>
+        {
+            var block = blocks[index];
+            parsed[index] = LogEntryParser.Parse(block.Text, block.Line);
+            var done = Interlocked.Increment(ref completed);
+            if (progress is not null && (done & 255) == 0)
+                lock (progressGate)
+                {
+                    var current = 25 + (int)((long)Volatile.Read(ref completed) * 55 / Math.Max(1, blocks.Count));
+                    if (current > reportedProgress)
+                    {
+                        progress.Report(current);
+                        reportedProgress = current;
+                    }
+                }
+        });
+        var entries = new List<ILogEntry>(parsed.Length);
+        foreach (var entry in parsed)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (entry is null)
+                continue;
+            if (entries.Count > 0 && MergeRadio.Merge(entries[^1], entry) is { } merged)
+                entries[^1] = merged;
+            else
+                entries.Add(entry);
+        }
+        progress?.Report(90);
 
         var roundEndPath = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, "round_end_data.html");
         var roundEndHtml = File.Exists(roundEndPath)
@@ -175,8 +215,11 @@ public sealed class LogService(IPlayerJoinService playerJoinService, IBigLogServ
                 string.Join("|", group.Append(group.Key).Distinct(StringComparer.OrdinalIgnoreCase)
                     .OrderByDescending(key => key.Length).Select(Regex.Escape)) +
                 @")(?![\p{L}\p{N}_-])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
-        var sensitiveKeys = LogMessageSanitizer.CreateKeyPattern(entries);
-        var characterNames = LogMessageHighlights.GetCharacterNames(entries);
+        Regex? sensitiveKeys = null;
+        IReadOnlySet<string>? characterNames = null;
+        Parallel.Invoke(
+            () => sensitiveKeys = LogMessageSanitizer.CreateKeyPattern(entries),
+            () => characterNames = LogMessageHighlights.GetCharacterNames(entries));
         sorted = sorted.Select(entry => ((LogEntry)entry) with { SensitiveKeys = sensitiveKeys, CharacterNames = characterNames }).ToArray();
         var mapName = sorted.Where(entry => entry.Type == "DEBUG")
             .Select(entry => LoadingMap.Match(entry.GetRawMessage())).FirstOrDefault(match => match.Success)

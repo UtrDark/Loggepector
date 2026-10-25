@@ -69,11 +69,15 @@
         <TextBlock Grid.Row="2" Text="{Binding ErrorMessage}" Foreground="IndianRed" IsVisible="{Binding HasErrorMessage}"
                    TextWrapping="Wrap" Margin="0,0,0,8" />
         <TextBlock Grid.Row="3" Text="{Binding TimeLabel}" />
-        <rs:RangeSlider Grid.Row="4" Minimum="0" Maximum="{Binding SliderMaximum}"
+        <Grid Grid.Row="4" ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2,0,6">
+            <Button Content="↺" Command="{Binding ResetTimeSliceCommand}" Padding="6,0"
+                    ToolTip.Tip="Весь лог" IsEnabled="{Binding CanSelectTime}" />
+        <rs:RangeSlider Grid.Column="1" Minimum="0" Maximum="{Binding SliderMaximum}"
                         LowerSelectedValue="{Binding FromSecond, Mode=TwoWay}"
                         UpperSelectedValue="{Binding ToSecond, Mode=TwoWay}"
                         TickFrequency="1" IsSnapToTickEnabled="True" IsThumbOverlap="True"
-                        IsEnabled="{Binding CanSelectTime}" Margin="0,2,0,6" />
+                        IsEnabled="{Binding CanSelectTime}" />
+        </Grid>
 
         <StackPanel Grid.Row="5" Margin="0,0,0,6" Spacing="4">
             <DockPanel LastChildFill="False" HorizontalAlignment="Left">
