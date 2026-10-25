@@ -194,7 +194,7 @@ public sealed class LogService(IPlayerJoinService playerJoinService, IBigLogServ
 
     private static Snapshot CreateSnapshot(IReadOnlyList<ILogEntry> entries, string? detectedMap = null, IReadOnlyList<string>? playerKeys = null, string? roundEndHtml = null)
     {
-        var sorted = entries.Select(entry => entry is ForcedSayLogEntry || entry.GetRawMessage().Contains("[FAI]", StringComparison.Ordinal)
+        var sorted = entries.Select(entry => entry.Type != "FORBIDDEN" && (entry is ForcedSayLogEntry || entry.GetRawMessage().Contains("[FAI]", StringComparison.Ordinal))
                 ? ((LogEntry)entry) with { Type = "AI" } : entry)
             .OrderBy(entry => entry.Timestamp).ThenBy(entry => entry.LineNumber)
             .ToArray();

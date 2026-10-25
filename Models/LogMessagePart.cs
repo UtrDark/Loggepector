@@ -22,6 +22,6 @@ public enum LogMessagePartKind
     Emoji
 }
 
-public sealed record LogMessagePart(string Text, LogMessagePartKind Kind, string? Channel = null);
+public sealed record LogMessagePart(string Text, LogMessagePartKind Kind, string? Channel = null, bool IsExcluded = false);
 
 public sealed record BadgeSearchRequest(LogMessagePart Part, bool Add);

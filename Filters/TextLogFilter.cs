@@ -13,6 +13,7 @@ public sealed class TextLogFilter : ILogFilter
     private readonly string[] _terms;
     private readonly Regex[] _exactTerms;
     private readonly LogMessagePart[][] _badgeGroups;
+    private readonly LogMessagePart[] _excludedBadges;
 
     public TextLogFilter(string text, bool fuzzy = false, IReadOnlyList<LogMessagePart>? badges = null)
     {
@@ -21,18 +22,23 @@ public sealed class TextLogFilter : ILogFilter
         _exactTerms = fuzzy ? Array.Empty<Regex>() : _terms.Select(term => new Regex(
             @"(?<![\p{L}\p{N}_])" + Regex.Escape(term) + @"(?![\p{L}\p{N}_])",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)).ToArray();
-        _badgeGroups = (badges ?? Array.Empty<LogMessagePart>()).GroupBy(part => part.Kind)
+        _excludedBadges = (badges ?? Array.Empty<LogMessagePart>()).Where(part => part.IsExcluded).ToArray();
+        _badgeGroups = (badges ?? Array.Empty<LogMessagePart>()).Where(part => !part.IsExcluded).GroupBy(part => part.Kind)
             .Select(group => group.ToArray()).ToArray();
     }
 
     public IEnumerable<ILogEntry> Apply(IEnumerable<ILogEntry> entries) =>
-        _terms.Length == 0 && _badgeGroups.Length == 0 ? entries : entries.Where(Matches);
+        _terms.Length == 0 && _badgeGroups.Length == 0 && _excludedBadges.Length == 0 ? entries : entries.Where(Matches);
 
     private bool Matches(ILogEntry entry)
     {
         IReadOnlyList<LogMessagePart>? actual = null;
         IReadOnlyList<LogMessagePart> GetBadges() => actual ??= entry is LogEntry log ? log.GetSearchBadges()
             : LogMessageHighlights.Create(entry, entry.GetLogMessage(), true);
+        if (_excludedBadges.Any(wanted => GetBadges().Any(part => part.Kind == wanted.Kind &&
+            (_fuzzy ? part.Text.Contains(wanted.Text, StringComparison.OrdinalIgnoreCase)
+                : part.Text.Equals(wanted.Text, StringComparison.OrdinalIgnoreCase)))))
+            return false;
         if (_terms.Length > 0)
         {
             var raw = entry.GetRawMessage();

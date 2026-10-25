@@ -29,6 +29,7 @@ public partial class LogTypeViewModel : ObservableObject
 
     public string Type { get; }
     public string Label => Type.Length == 0 ? "Без типа" : Type;
+    public IBrush TypeColor => LogDisplayConfig.GetType(Type).Foreground;
 
     public LogTypeViewModel(string type, Action selectionChanged)
     {

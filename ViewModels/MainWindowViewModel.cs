@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using System.Threading;
 using Loggepector.Services;
 using Loggepector.Utils;
+using Loggepector.Filters;
 
 namespace Loggepector.ViewModels;
 
@@ -54,6 +55,14 @@ public partial class MainWindowViewModel : ViewModelBase
         if (!SearchBadges.Any(badge => badge.Part.Kind == request.Part.Kind &&
             badge.Part.Text.Equals(request.Part.Text, StringComparison.OrdinalIgnoreCase)))
             SearchBadges.Add(new SearchBadgeViewModel(request.Part));
+        if (HasLogs && !IsLoading)
+            UpdateLogs();
+    }
+
+    [RelayCommand]
+    private void ToggleSearchBadgeExclusion(SearchBadgeViewModel badge)
+    {
+        badge.IsExcluded = !badge.IsExcluded;
         if (HasLogs && !IsLoading)
             UpdateLogs();
     }
@@ -262,7 +271,42 @@ public partial class MainWindowViewModel : ViewModelBase
     private IReadOnlyList<LogEntryViewModel> _logs = Array.Empty<LogEntryViewModel>();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasForbidden))]
     private IReadOnlyList<LogTypeViewModel> _logTypes = Array.Empty<LogTypeViewModel>();
+
+    public bool HasForbidden => LogTypes.Any(type => type.Type == "FORBIDDEN");
+
+    private static bool IsIcType(string type) =>
+        type is "SAY" or "ATTACK" or "WHISPER" or "RADIO" or "EMOTE" or "ANOUNCE" or "PRAY" or "PDA";
+
+    [RelayCommand]
+    private void ClearTypeFilters()
+    {
+        foreach (var type in LogTypes)
+            type.IsSelected = false;
+    }
+
+    [RelayCommand]
+    private void FilterIc()
+    {
+        foreach (var type in LogTypes)
+            type.IsSelected = IsIcType(type.Type);
+    }
+
+    [RelayCommand]
+    private void FilterOoc()
+    {
+        foreach (var type in LogTypes)
+            type.IsSelected = !IsIcType(type.Type) && type.Type is not ("ACCESS" or "AI") && !type.Type.StartsWith("MISC", StringComparison.Ordinal) &&
+                !type.Type.StartsWith("DEBUG", StringComparison.Ordinal);
+    }
+
+    [RelayCommand]
+    private void FilterForbidden()
+    {
+        foreach (var type in LogTypes)
+            type.IsSelected = type.Type == "FORBIDDEN";
+    }
 
     [ObservableProperty]
     private bool _isSearchVisible;
@@ -592,7 +636,8 @@ public partial class MainWindowViewModel : ViewModelBase
         var revision = ++_contextRevision;
         var searchText = SearchText;
         var fuzzy = FuzzySearch;
-        var badges = SearchBadges.Select(badge => badge.Part).ToArray();
+        var badges = SearchBadges.Select(badge => badge.FilterPart).ToArray();
+        var excludedBadges = badges.Where(badge => badge.IsExcluded).ToArray();
         var from = TimeSpan.FromSeconds(FromSecond);
         var to = TimeSpan.FromSeconds(ToSecond);
         var types = LogTypes.Where(type => type.IsSelected == true).Select(type => type.Type).ToArray();
@@ -619,6 +664,8 @@ public partial class MainWindowViewModel : ViewModelBase
                     var candidates = _logService.GetLogs(from, to);
                     captured = LogNeighbors.Find(candidates, filtered, sameType, byCoordinates, count, radius);
                 }
+                if (excludedBadges.Length > 0)
+                    captured = new TextLogFilter(string.Empty, fuzzy, excludedBadges).Apply(captured).ToArray();
                 token.ThrowIfCancellationRequested();
                 return (Filtered: filtered, Entries: captured);
             }, token);
