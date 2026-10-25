@@ -9,6 +9,10 @@
         Icon="/Assets/avalonia-logo.ico"
         Title="Loggepector">
     <Window.Styles>
+        <Style Selector="ToggleButton.badgeExclude:checked">
+            <Setter Property="Foreground" Value="IndianRed" />
+            <Setter Property="BorderBrush" Value="IndianRed" />
+        </Style>
         <Style Selector="FlyoutPresenter.resources">
             <Setter Property="MaxWidth" Value="440" />
         </Style>
@@ -95,7 +99,13 @@
                 <Button Content="Типы ▾" IsEnabled="{Binding CanOpenFile}">
                     <Button.Flyout>
                         <Flyout>
-                            <ScrollViewer MaxHeight="320">
+                            <Grid RowDefinitions="Auto,*" RowSpacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Button Content="Снять все" Command="{Binding ClearTypeFiltersCommand}" Padding="6,2" />
+                                    <Button Content="IC" Command="{Binding FilterIcCommand}" Padding="8,2" />
+                                    <Button Content="OOC" Command="{Binding FilterOocCommand}" Padding="8,2" />
+                                </StackPanel>
+                            <ScrollViewer Grid.Row="1" MaxHeight="320">
                                 <ItemsControl ItemsSource="{Binding LogTypes}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:LogTypeViewModel">
@@ -108,13 +118,14 @@
                                                         <TextBlock Text="{Binding FilterMark}" Foreground="{Binding FilterColor}"
                                                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                     </Border>
-                                                    <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                                    <TextBlock Text="{Binding Label}" Foreground="{Binding TypeColor}" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </ScrollViewer>
+                            </Grid>
                         </Flyout>
                     </Button.Flyout>
                 </Button>
@@ -143,6 +154,8 @@
                     </Flyout>
                 </Button.Flyout>
             </Button>
+            <Button Content="Forbidden" Command="{Binding FilterForbiddenCommand}" IsVisible="{Binding HasForbidden}"
+                    IsEnabled="{Binding CanOpenFile}" Margin="8,0,0,0" ToolTip.Tip="Фильтровать по типу FORBIDDEN" />
             <CheckBox Content="Sanitize" IsChecked="{Binding Sanitize, Mode=TwoWay}" Margin="12,0,0,0" />
             <CheckBox Content="Relative" IsChecked="{Binding Relative, Mode=TwoWay}" Margin="12,0,0,0" />
             <CheckBox Content="Show raw" IsChecked="{Binding ShowRaw, Mode=TwoWay}" Margin="12,0,0,0" />
@@ -167,6 +180,11 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:SearchBadgeViewModel">
                                 <StackPanel Orientation="Horizontal" Margin="0,0,6,0" Spacing="2">
+                                    <ToggleButton Content="!" Classes="badgeExclude" IsChecked="{Binding IsExcluded, Mode=OneWay}"
+                                                  Padding="4,0" MinHeight="0" Height="24"
+                                                  ToolTip.Tip="Исключать записи с этой плашкой"
+                                                  Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ToggleSearchBadgeExclusionCommand}"
+                                                  CommandParameter="{Binding}" />
                                     <views:LogMessageTextBlock Parts="{Binding Parts}" AllowTextSelection="False" VerticalAlignment="Center" />
                                     <Button Content="×" Padding="3,0" MinHeight="0" Height="24"
                                             ToolTip.Tip="Убрать плашку из поиска"
