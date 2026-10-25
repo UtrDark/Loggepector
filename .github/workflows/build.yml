@@ -2,20 +2,13 @@ name: Desktop build
 
 on:
   push:
-    branches: [build]
     tags: ["v*"]
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "Existing GitHub tag to release (for example v0.0.3); leave empty for artifacts only"
-        required: false
-        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-build-${{ github.ref }}-${{ inputs.release_tag }}
+  group: desktop-build-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -37,21 +30,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          tag="${INPUT_RELEASE_TAG:-}"
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then tag="${GITHUB_REF#refs/tags/}"; fi
-          if [[ -n "$tag" ]]; then
-            if [[ ! "$tag" =~ ^v[0-9][0-9A-Za-z._-]*$ ]]; then echo 'Release tag must start with v and contain a version.' >&2; exit 1; fi
-            if ! gh api "repos/$GH_REPO/git/ref/tags/$tag" > /dev/null; then
-              echo 'Tag is not available on GitHub. In GitKraken use Tags -> right-click the tag -> Push tag -> origin.' >&2
-              exit 1
-            fi
-            echo "ref=refs/tags/$tag" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+          tag="${GITHUB_REF#refs/tags/}"
+          if [[ "$GITHUB_REF" != refs/tags/* || ! "$tag" =~ ^v[0-9][0-9A-Za-z._-]*$ ]]; then
+            echo "Release builds require a version tag starting with v." >&2
+            exit 1
           fi
+          gh api "repos/$GH_REPO/git/ref/tags/$tag" > /dev/null
+          echo "ref=refs/tags/$tag" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
   publish:
