@@ -1,0 +1,14 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Loggepector.Views.UpdateConsentWindow"
+        Title="Проверка обновлений" Width="510" SizeToContent="Height" CanResize="False"
+        WindowStartupLocation="CenterOwner">
+    <StackPanel Margin="20" Spacing="16">
+        <TextBlock Text="Разрешить проверку обновлений?" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock Text="При запуске приложение будет обращаться к api.github.com для проверки новых релизов. Логи не отправляются. Ваш выбор сохранится и будет действовать при следующих запусках." TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="10">
+            <Button Content="Не разрешать" Click="Decline" />
+            <Button Content="Разрешить" Click="Approve" />
+        </StackPanel>
+    </StackPanel>
+</Window>

@@ -13,8 +13,10 @@ namespace Loggepector.Services;
 public sealed class UpdateService : IUpdateService
 {
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private readonly string _consentPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Loggepector", "update-check.json");
 
-    public async Task<ReleaseUpdate> CheckAsync(CancellationToken cancellationToken)
+    public async Task<ReleaseUpdate> CheckAsync(Func<CancellationToken, Task<bool?>> requestConsent, CancellationToken cancellationToken)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "build-info.json");
         if (!File.Exists(path))
@@ -32,6 +34,30 @@ public sealed class UpdateService : IUpdateService
             throw new InvalidDataException("Некорректный repository в build-info.json.");
         var owner = parts[0];
         var name = parts[1];
+        bool? allowed;
+        if (File.Exists(_consentPath))
+        {
+            using var consent = JsonDocument.Parse(await File.ReadAllTextAsync(_consentPath, cancellationToken).ConfigureAwait(false));
+            allowed = consent.RootElement.GetBoolean();
+        }
+        else
+        {
+            allowed = await requestConsent(cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (allowed.HasValue)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(_consentPath)!);
+                var temporary = _consentPath + ".tmp";
+                try
+                {
+                    await File.WriteAllTextAsync(temporary, allowed.Value ? "true" : "false", cancellationToken).ConfigureAwait(false);
+                    File.Move(temporary, _consentPath, true);
+                }
+                finally { File.Delete(temporary); }
+            }
+        }
+        if (allowed != true)
+            return new ReleaseUpdate(null, allowed == false ? "Проверка обновлений отключена пользователем." : "Разрешение на проверку обновлений не получено.");
         var api = $"https://api.github.com/repos/{Uri.EscapeDataString(owner)}/{Uri.EscapeDataString(name)}";
         using var request = new HttpRequestMessage(HttpMethod.Get, api + "/releases/latest");
         request.Headers.UserAgent.ParseAdd("Loggepector/1.0");
