@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Linq;
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Media;
@@ -33,7 +34,10 @@ public partial class LogEntryViewModel(ILogEntry entry, DateTime roundStart, boo
     public string RawMessage => Entry.GetRawMessage();
 
     private IReadOnlyList<LogMessagePart>? _messageParts;
-    public IReadOnlyList<LogMessagePart> MessageParts => _messageParts ??= LogMessageHighlights.Create(Entry, Message, ShowArea);
+    public IReadOnlyList<LogMessagePart> MessageParts => _messageParts ??= Entry is LogEntry log
+        ? log.GetMessageParts(ShowArea) : LogMessageHighlights.Create(Entry, Message, ShowArea);
+
+    public string FindText => Entry is LogEntry log ? log.GetFindText(ShowArea) : string.Concat(MessageParts.Select(part => part.Text));
 
     [ObservableProperty]
     private bool _showArea = showArea;

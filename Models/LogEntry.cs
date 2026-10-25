@@ -20,9 +20,21 @@ public record LogEntry(DateTime Timestamp, string Type, string Message, int Line
     private string? _formattedMessage;
     private string? _logMessage;
     private IReadOnlyList<LogMessagePart>? _searchBadges;
+    private IReadOnlyList<LogMessagePart>? _parts;
+    private IReadOnlyList<LogMessagePart>? _partsWithArea;
+    private string? _findText;
+    private string? _findTextWithArea;
+
+    internal IReadOnlyList<LogMessagePart> GetMessageParts(bool showArea) => showArea
+        ? _partsWithArea ??= LogMessageHighlights.Create(this, GetLogMessage(), true)
+        : _parts ??= LogMessageHighlights.Create(this, GetLogMessage());
+
+    internal string GetFindText(bool showArea) => showArea
+        ? _findTextWithArea ??= string.Concat(GetMessageParts(true).Select(part => part.Text))
+        : _findText ??= string.Concat(GetMessageParts(false).Select(part => part.Text));
 
     internal IReadOnlyList<LogMessagePart> GetSearchBadges() => _searchBadges ??=
-        LogMessageHighlights.Create(this, GetLogMessage(), true)
+        GetMessageParts(true)
             .Where(part => part.Kind != LogMessagePartKind.Text).ToArray();
     private string? _coordinatesSource;
     private (int X, int Y, int Z)? _coordinates;

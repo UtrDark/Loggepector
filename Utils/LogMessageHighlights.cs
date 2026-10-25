@@ -18,16 +18,31 @@ internal static class LogMessageHighlights
     private static readonly Regex SpellTarget = new(@"\bcast the spell .+? on / at (?<name>.+?)\.[ \t]*$", RegexOptions.Compiled);
     private static readonly Regex PointTarget = new(@"\bpoints at (?<name>.+?)[ \t]*$", RegexOptions.Compiled);
 
-    internal static IReadOnlySet<string> GetCharacterNames(IEnumerable<ILogEntry> entries) => entries
-        .SelectMany(entry => Actor.Matches(entry.GetRawMessage()).Cast<Match>()
-            .Concat(ActingAs.Matches(entry.GetRawMessage()).Cast<Match>())
-            .Concat(Join.Matches(entry.GetRawMessage()).Cast<Match>()))
-        .Select(match => match.Groups["name"].Value.Trim())
-        .Where(name => name.Length > 0).ToHashSet(StringComparer.OrdinalIgnoreCase);
+    internal static IReadOnlySet<string> GetCharacterNames(IEnumerable<ILogEntry> entries)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(Regex pattern, string raw)
+        {
+            foreach (Match match in pattern.Matches(raw))
+            {
+                var name = match.Groups["name"].Value.Trim();
+                if (name.Length > 0) names.Add(name);
+            }
+        }
+        foreach (var entry in entries)
+        {
+            var raw = entry.GetRawMessage();
+            if (raw.Contains("/(", StringComparison.Ordinal)) Add(Actor, raw);
+            if (raw.Contains("(as ", StringComparison.Ordinal)) Add(ActingAs, raw);
+            if (raw.Contains('\\')) Add(Join, raw);
+        }
+        return names;
+    }
 
     public static IReadOnlyList<LogMessagePart> Create(ILogEntry entry, string message, bool showArea = false)
     {
         message = EmojiMarkup.Replace(message);
+        var raw = entry.GetRawMessage();
         var locations = Area.Matches(message).Cast<Match>().ToArray();
         var inlineAreas = entry is ExplosionLogEntry || locations.Length > 1 || message.Contains("has teleported from", StringComparison.OrdinalIgnoreCase);
         static string AreaName(Match match) => match.Groups["area"].Value.Replace("\r", string.Empty).Replace("\n", string.Empty).Trim();
@@ -50,7 +65,9 @@ internal static class LogMessageHighlights
             parts.Add(new LogMessagePart(" ", LogMessagePartKind.Text));
             message = message[6..];
         }
-        foreach (var match in Actor.Matches(entry.GetRawMessage()).Cast<Match>().Concat(Join.Matches(entry.GetRawMessage()).Cast<Match>()))
+        var actors = raw.Contains("/(", StringComparison.Ordinal) ? Actor.Matches(raw).Cast<Match>() : Enumerable.Empty<Match>();
+        var joins = raw.Contains('\\') ? Join.Matches(raw).Cast<Match>() : Enumerable.Empty<Match>();
+        foreach (var match in actors.Concat(joins))
         {
             var name = match.Groups["name"].Value.Trim();
             var key = match.Groups["key"].Value.Trim();
@@ -63,8 +80,9 @@ internal static class LogMessageHighlights
                 identities[key] = LogMessagePartKind.CKey;
         }
         message = NoKey.Replace(message, string.Empty).TrimStart();
-        var recipient = Recipient.Match(entry.GetRawMessage());
-        foreach (Match actor in ActingAs.Matches(entry.GetRawMessage()))
+        var recipient = raw.Contains("PDA:", StringComparison.Ordinal) ? Recipient.Match(raw) : Match.Empty;
+        var acting = raw.Contains("(as ", StringComparison.Ordinal) ? ActingAs.Matches(raw).Cast<Match>() : Enumerable.Empty<Match>();
+        foreach (var actor in acting)
         {
             if (actor.Groups["name"].Value.Length > 0)
                 identities[actor.Groups["name"].Value] = LogMessagePartKind.CharacterName;
@@ -88,19 +106,47 @@ internal static class LogMessageHighlights
             parts.Add(new LogMessagePart(message, LogMessagePartKind.Text));
             return Finish(parts, entry, showArea && !inlineAreas);
         }
-        var pattern = @"(?<![\p{L}\p{N}_])(?:" + string.Join("|", identities.Keys.OrderByDescending(value => value.Length).Select(Regex.Escape)) + @")(?![\p{L}\p{N}_])";
         var position = 0;
-        foreach (Match match in Regex.Matches(message, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        var labels = identities.Keys.OrderByDescending(value => value.Length).ToArray();
+        while (position < message.Length)
         {
-            if (match.Index > position)
-                parts.Add(new LogMessagePart(message[position..match.Index], LogMessagePartKind.Text));
-            parts.Add(new LogMessagePart(match.Value, identities[match.Value]));
-            position = match.Index + match.Length;
+            var index = -1;
+            string? label = null;
+            foreach (var candidate in labels)
+            {
+                var search = position;
+                while (search <= message.Length - candidate.Length)
+                {
+                    var found = message.IndexOf(candidate, search, StringComparison.OrdinalIgnoreCase);
+                    if (found < 0)
+                        break;
+                    var end = found + candidate.Length;
+                    if ((found == 0 || !IsIdentityCharacter(message[found - 1])) &&
+                        (end == message.Length || !IsIdentityCharacter(message[end])))
+                    {
+                        if (index < 0 || found < index)
+                        {
+                            index = found;
+                            label = candidate;
+                        }
+                        break;
+                    }
+                    search = found + 1;
+                }
+            }
+            if (index < 0)
+                break;
+            if (index > position)
+                parts.Add(new LogMessagePart(message[position..index], LogMessagePartKind.Text));
+            parts.Add(new LogMessagePart(message.Substring(index, label!.Length), identities[label]));
+            position = index + label.Length;
         }
         if (position < message.Length)
             parts.Add(new LogMessagePart(message[position..], LogMessagePartKind.Text));
         return Finish(parts, entry, showArea && !inlineAreas);
     }
+
+    private static bool IsIdentityCharacter(char value) => value == '_' || char.IsLetter(value) || char.IsNumber(value);
 
     private static IReadOnlyList<LogMessagePart> Finish(List<LogMessagePart> parts, ILogEntry entry, bool showArea)
     {

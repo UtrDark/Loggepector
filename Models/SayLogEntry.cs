@@ -1,3 +1,4 @@
+using System;
 using System.Text.RegularExpressions;
 
 namespace Loggepector.Models;
@@ -17,6 +18,8 @@ public record SayLogEntry : LogEntry
 
     internal static LogEntry? TryCreate(LogEntry entry)
     {
+        if (!entry.Message.Contains('"') || !entry.Message.Contains("/(", StringComparison.Ordinal))
+            return null;
         var speech = Speech.Match(entry.Message);
         if (!speech.Success)
             return null;
