@@ -300,53 +300,6 @@ public partial class MainWindow : Window
         window.Show();
     }
 
-    private async void ConnectLogis(object? sender, RoutedEventArgs e)
-    {
-        var model = (MainWindowViewModel)DataContext!;
-        var loginAttempted = false;
-        try
-        {
-            model.RestoreLogisSession();
-            var requiresLogin = !model.HasLogisSession;
-            while (true)
-            {
-                if (requiresLogin)
-                {
-                    var login = new LogisWindow { DataContext = model.CreateLogisConnection() };
-                    if (!await login.ShowDialog<bool>(this))
-                        return;
-                    model.RefreshLogisSession();
-                    loginAttempted = true;
-                }
-                var browserModel = model.CreateLogisBrowser(!loginAttempted);
-                var browser = new LogisBrowserWindow { DataContext = browserModel };
-                await browser.ShowDialog<bool>(this);
-                if (browserModel.RequiresLogin)
-                {
-                    requiresLogin = true;
-                    continue;
-                }
-                if (browserModel.DownloadedPath is not { } path)
-                    return;
-                try
-                {
-                    await model.LoadAsync(path);
-                    if (model.ErrorMessage is null)
-                        model.FileName = browserModel.LogLabel;
-                }
-                finally
-                {
-                    File.Delete(path);
-                }
-                return;
-            }
-        }
-        catch (Exception exception)
-        {
-            model.ErrorMessage = $"Не удалось открыть лог из Logis: {exception.Message}";
-        }
-    }
-
     private void RefreshResources(object? sender, RoutedEventArgs e) => ((MainWindowViewModel)DataContext!).RefreshResources();
 
     private async void DeleteMapResources(object? sender, RoutedEventArgs e)

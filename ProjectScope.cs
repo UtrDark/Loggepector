@@ -10,7 +10,6 @@ public static class ProjectScope
     {
         var builder = new ContainerBuilder();
         builder.Register(_ => new UpdateService()).As<IUpdateService>().SingleInstance();
-        builder.Register(_ => new LogisService()).As<ILogisService>().SingleInstance();
         builder.Register(_ => new EmojiService()).As<IEmojiService>().SingleInstance();
         builder.Register(_ => new RoundEndStyleService()).As<IRoundEndStyleService>().SingleInstance();
         builder.Register(_ => new ThemeService()).As<IThemeService>().SingleInstance();
@@ -21,7 +20,7 @@ public static class ProjectScope
         builder.Register(_ => new MapPreparationService()).As<IMapPreparationService>().SingleInstance();
         builder.Register(_ => new MapViewService()).As<IMapViewService>().SingleInstance();
         builder.Register(scope => new MainWindowViewModel(scope.Resolve<ILogService>(),
-            scope.Resolve<IMapPreparationService>(), scope.Resolve<IMapViewService>(), scope.Resolve<IThemeService>(), scope.Resolve<ILogisService>(), scope.Resolve<IRoundEndStyleService>(), scope.Resolve<IEmojiService>(), scope.Resolve<IUpdateService>())).SingleInstance();
+            scope.Resolve<IMapPreparationService>(), scope.Resolve<IMapViewService>(), scope.Resolve<IThemeService>(), scope.Resolve<IRoundEndStyleService>(), scope.Resolve<IEmojiService>(), scope.Resolve<IUpdateService>())).SingleInstance();
         return builder.Build();
     }
 }
