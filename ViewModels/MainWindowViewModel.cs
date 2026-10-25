@@ -144,6 +144,7 @@ public partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ThemeButtonText))]
+    [NotifyPropertyChangedFor(nameof(UpdateNoticeColor))]
     private bool _isDarkTheme;
 
     public string ThemeButtonText => IsDarkTheme ? "☀" : "☾";
@@ -301,8 +302,9 @@ public partial class MainWindowViewModel : ViewModelBase
     public string TimeLabel => $"От {TimeSpan.FromSeconds(FromSecond):c} до {TimeSpan.FromSeconds(ToSecond):c} · Всего {TimeSpan.FromSeconds(MaximumSecond):c}";
     public string CountLabel => $"Показано: {Logs.Count:N0} · Всего: {TotalCount:N0}";
 
-    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService, IThemeService themeService, ILogisService logisService, IRoundEndStyleService roundEndStyle, IEmojiService emojiService)
+    public MainWindowViewModel(ILogService logService, IMapPreparationService mapPreparation, IMapViewService mapViewService, IThemeService themeService, ILogisService logisService, IRoundEndStyleService roundEndStyle, IEmojiService emojiService, IUpdateService updateService)
     {
+        _updateService = updateService;
         _emojiService = emojiService;
         _roundEndStyle = roundEndStyle;
         _logisService = logisService;
